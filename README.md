@@ -15,7 +15,7 @@ It serves a built-in frontend and exposes a small API used by that frontend.
 
 ## Tech Stack
 
-- Go 1.25+
+- Go 1.26+
 - Fiber v3
 - Cloudflare Turnstile
 - External provider API: `https://api.fallenapi.fun`

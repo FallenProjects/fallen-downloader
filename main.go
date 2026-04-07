@@ -13,7 +13,6 @@ import (
 	"github.com/gofiber/fiber/v3/log"
 	"github.com/gofiber/fiber/v3/middleware/compress"
 	"github.com/gofiber/fiber/v3/middleware/logger"
-	"github.com/gofiber/fiber/v3/middleware/pprof"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
 	"github.com/gofiber/template/html/v2"
@@ -61,15 +60,10 @@ func main() {
 		Level: compress.LevelBestSpeed,
 	}))
 
-	app.Use(pprof.New())
 	port := cfg.Port
 	app.Use(api.CORS())
 
 	app.Get("/", func(c fiber.Ctx) error {
-		c.Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
-		c.Set("Pragma", "no-cache")
-		c.Set("Expires", "0")
-
 		return c.Render("templates/index", fiber.Map{
 			"TurnstileSiteKey": cfg.TurnstileSiteKey,
 		})
@@ -77,10 +71,7 @@ func main() {
 
 	subFS, _ := fs.Sub(templatesFS, "templates")
 	app.Use("/", static.New("", static.Config{
-		FS:            subFS,
-		MaxAge:        0,
-		Browse:        false,
-		CacheDuration: 0,
+		FS: subFS,
 	}))
 
 	app.Get("/health", func(c fiber.Ctx) error {
