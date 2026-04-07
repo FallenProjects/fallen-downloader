@@ -10,6 +10,7 @@
     --border-radius: 12px;
 }
 
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -50,6 +51,23 @@ header p {
     color: #8b949e;
 }
 
+.supported-platforms {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.supported-platforms span {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+    color: #c9d1d9;
+    font-size: 0.82rem;
+}
+
 .glass {
     background: var(--glass-bg);
     backdrop-filter: blur(10px);
@@ -63,6 +81,19 @@ header p {
     display: flex;
     gap: 10px;
     margin-bottom: 15px;
+}
+
+.input-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    color: #c9d1d9;
+}
+
+.input-help {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: #8b949e;
 }
 
 input[type="text"] {
@@ -79,6 +110,13 @@ input[type="text"] {
 
 input[type="text"]:focus {
     border-color: var(--primary-color);
+}
+
+input[type="text"]:focus-visible,
+button:focus-visible,
+footer a:focus-visible {
+    outline: 2px solid #58a6ff;
+    outline-offset: 2px;
 }
 
 button {
@@ -348,6 +386,31 @@ footer {
     margin-top: 50px;
     color: #484f58;
     font-size: 0.8rem;
+}
+
+footer a {
+    color: #8b949e;
+}
+
+footer a:hover {
+    color: #c9d1d9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    button:hover:not(:disabled),
+    .track-item:hover,
+    .image-item:hover img {
+        transform: none;
+    }
 }
 
 @media (max-width: 600px) {

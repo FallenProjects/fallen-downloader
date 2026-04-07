@@ -27,6 +27,7 @@ const platformBadge = document.getElementById('platform-badge');
 const statusMessage = document.getElementById('status-message');
 const loader = document.getElementById('loader');
 const resultContainer = document.getElementById('result-container');
+const mainContent = document.getElementById('main-content');
 
 let turnstileToken = '';
 let pendingAction = null;
@@ -62,6 +63,8 @@ urlInput.addEventListener('input', () => {
     const url = urlInput.value.trim();
     const platform = detectPlatform(url);
 
+    statusMessage.classList.add('hidden');
+
     if (platform) {
         platformBadge.innerText = platform;
         platformBadge.classList.remove('hidden');
@@ -69,6 +72,13 @@ urlInput.addEventListener('input', () => {
     } else {
         platformBadge.classList.add('hidden');
         downloadBtn.disabled = true;
+    }
+});
+
+urlInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !downloadBtn.disabled) {
+        event.preventDefault();
+        downloadBtn.click();
     }
 });
 
@@ -187,6 +197,8 @@ async function apiCall(endpoint, params, token) {
 function displaySnapResult(data) {
     resultContainer.classList.remove('hidden');
     resultContainer.innerHTML = '';
+    resultContainer.setAttribute('aria-busy', 'false');
+    statusMessage.classList.add('hidden');
 
     const card = document.createElement('div');
     card.className = 'glass result-card';
@@ -211,7 +223,9 @@ function displaySnapResult(data) {
         thumbContainer.className = 'thumbnail-container';
         const img = document.createElement('img');
         img.src = mainThumbnail;
-        img.alt = "Thumbnail";
+        img.alt = data.title ? `${data.title} thumbnail` : 'Media thumbnail';
+        img.loading = 'lazy';
+        img.decoding = 'async';
         thumbContainer.appendChild(img);
         card.appendChild(thumbContainer);
     }
@@ -275,6 +289,8 @@ function displaySnapResult(data) {
             const img = document.createElement('img');
             img.src = imgUrl;
             img.loading = 'lazy';
+            img.decoding = 'async';
+            img.alt = 'Downloadable media image';
 
             const overlay = document.createElement('div');
             overlay.className = 'image-overlay';
@@ -297,6 +313,8 @@ function displaySnapResult(data) {
 function displayMusicResult(data) {
     resultContainer.classList.remove('hidden');
     resultContainer.innerHTML = '';
+    resultContainer.setAttribute('aria-busy', 'false');
+    statusMessage.classList.add('hidden');
 
     const list = document.createElement('div');
     list.className = 'track-list';
@@ -316,7 +334,9 @@ function displayMusicResult(data) {
         thumb.className = 'track-thumb';
         const thumbImg = document.createElement('img');
         thumbImg.src = track.thumbnail;
-        thumbImg.alt = 'thumb';
+        thumbImg.alt = track.title ? `${track.title} cover` : 'Track cover';
+        thumbImg.loading = 'lazy';
+        thumbImg.decoding = 'async';
         thumb.appendChild(thumbImg);
 
         const info = document.createElement('div');
@@ -409,11 +429,17 @@ function resetUI() {
 }
 
 function showLoader() {
+    mainContent?.setAttribute('aria-busy', 'true');
     loader.classList.remove('hidden');
     resultContainer.classList.add('hidden');
+    resultContainer.setAttribute('aria-busy', 'true');
+    statusMessage.innerText = 'Processing request...';
+    statusMessage.className = 'status-message';
+    statusMessage.classList.remove('hidden');
 }
 
 function hideLoader() {
+    mainContent?.setAttribute('aria-busy', 'false');
     loader.classList.add('hidden');
 }
 

@@ -3,7 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fallen Downloader</title>
+    <title>Fallen Downloader - Fast Media Downloader for Social and Music Links</title>
+    <meta name="description" content="Download videos, images, and audio from supported social and music links with Fallen Downloader. Fast web UI, secure Turnstile verification, and simple one-click downloads.">
+    <meta name="keywords" content="media downloader, instagram downloader, tiktok downloader, spotify downloader, fallen downloader">
+    <meta name="robots" content="index,follow,max-image-preview:large">
+    <meta name="author" content="FallenProjects">
+    <meta name="theme-color" content="#0d1117">
+    <link rel="canonical" href="https://github.com/FallenProjects/fallen-downloader">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Fallen Downloader">
+    <meta property="og:title" content="Fallen Downloader - Fast Media Downloader">
+    <meta property="og:description" content="Paste a supported media link and download videos, images, or audio in seconds.">
+    <meta property="og:url" content="https://github.com/FallenProjects/fallen-downloader">
+    <meta property="og:image" content="https://opengraph.githubassets.com/1/FallenProjects/fallen-downloader">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Fallen Downloader - Fast Media Downloader">
+    <meta name="twitter:description" content="Download media from supported social and music links with a modern and secure web UI.">
+    <meta name="twitter:image" content="https://opengraph.githubassets.com/1/FallenProjects/fallen-downloader">
 
     <link rel="stylesheet" href="style.css?v=1.0.1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -13,41 +31,64 @@
 <div class="container">
     <header>
         <h1><i class="fas fa-cloud-download-alt"></i> Fallen Downloader</h1>
-        <p>Fast, Secure, and Modern</p>
+        <p>Fast, secure, and modern downloads for popular social and music platforms.</p>
+        <div class="supported-platforms" aria-label="Supported platforms">
+            <span>Instagram</span>
+            <span>TikTok</span>
+            <span>Pinterest</span>
+            <span>X</span>
+            <span>Spotify</span>
+            <span>SoundCloud</span>
+        </div>
     </header>
 
-    <main>
+    <main id="main-content">
         <div class="card glass">
+            <label class="input-label" for="url-input">Paste your media URL</label>
             <div class="input-group">
                 <input type="text" id="url-input"
                        placeholder="Paste link here (Instagram, TikTok, Spotify...)"
-                       autocomplete="off">
+                       autocomplete="off"
+                       aria-describedby="input-help"
+                       inputmode="url">
 
-                <button id="download-btn" disabled>
+                <button id="download-btn" type="button" disabled aria-label="Download media from the pasted link">
                     <i class="fas fa-download"></i> Download
                 </button>
             </div>
+            <p id="input-help" class="input-help">Tip: press Enter to start after a valid URL is detected.</p>
 
-            <div id="platform-badge" class="badge hidden"></div>
+            <div id="platform-badge" class="badge hidden" aria-live="polite"></div>
         </div>
 
-        <div id="status-message" class="status-message hidden"></div>
+        <div id="status-message" class="status-message hidden" role="status" aria-live="polite"></div>
 
-        <div id="loader" class="loader hidden">
+        <div id="loader" class="loader hidden" role="status" aria-live="polite" aria-label="Loading">
             <div class="spinner"></div>
             <p>Processing...</p>
         </div>
 
-        <div id="result-container" class="result-container hidden"></div>
+        <div id="result-container" class="result-container hidden" aria-live="polite"></div>
 
         <!-- invisible turnstile -->
         <div id="turnstile-container"></div>
     </main>
 
     <footer>
-        <p>&copy; 2026 Fallen Downloader. Powered by api.fallenapi.fun</p>
+        <p>&copy; 2026 Fallen Downloader. Powered by api.fallenapi.fun.</p>
+        <p><a href="https://github.com/FallenProjects/fallen-downloader" target="_blank" rel="noopener noreferrer">View source on GitHub</a></p>
     </footer>
 </div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Fallen Downloader",
+  "url": "https://github.com/FallenProjects/fallen-downloader",
+  "description": "Fast, secure, and modern media downloader for supported social and music links."
+}
+</script>
 
 <script>
     window.turnstileSiteKey = "{{.TurnstileSiteKey}}";

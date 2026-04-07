@@ -1,6 +1,8 @@
 # Fallen Downloader
 
-Fallen Downloader is a Go web app that lets users paste supported media links, solve Cloudflare Turnstile verification, and download media through `api.fallenapi.fun`.
+Fallen Downloader is an open-source Go web app for downloading media from supported social and music URLs.
+
+Users can paste a supported link, pass Cloudflare Turnstile verification, and fetch downloadable media via `api.fallenapi.fun`.
 
 It serves a built-in frontend and exposes a small API used by that frontend.
 
