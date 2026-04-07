@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/gofiber/fiber/v3/log"
 	_ "github.com/joho/godotenv/autoload"
 )
 
@@ -37,12 +38,18 @@ func Load() (*Config, error) {
 		cfg.Port = "8080"
 	}
 
+	// https://developers.cloudflare.com/turnstile/troubleshooting/testing/
 	cfg.TurnstileSecret = os.Getenv("TURNSTILE_SECRET")
 	if cfg.TurnstileSecret == "" {
-		return nil, fmt.Errorf("%w: %s", ErrMissingEnv, "TURNSTILE_SECRET")
+		log.Warnf("TURNSTILE_SECRET not set, using default test secret key. This should not be used in production.")
+		cfg.TurnstileSecret = "1x0000000000000000000000000000000AA"
 	}
 
 	cfg.TurnstileSiteKey = os.Getenv("TURNSTILE_SITE_KEY")
+	if cfg.TurnstileSiteKey == "" {
+		log.Warnf("TURNSTILE_SITE_KEY not set, using default test site key. This should not be used in production.")
+		cfg.TurnstileSiteKey = "1x00000000000000000000BB"
+	}
 	return cfg, nil
 }
 
