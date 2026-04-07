@@ -2,12 +2,12 @@ package api
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/log"
 )
 
 type turnstileResponse struct {
@@ -32,7 +32,7 @@ func TurnstileMiddleware(secret string) fiber.Handler {
 
 		token := c.Get("X-CF-Turnstile-Token")
 		if token == "" {
-			log.Printf("Turnstile missing token ip=%s", c.IP())
+			log.Warnf("Turnstile missing token ip=%s", c.IP())
 			return c.Status(fiber.StatusForbidden).
 				JSON(NewErrorResponse(fiber.StatusForbidden, "Verification failed"))
 		}
@@ -47,29 +47,29 @@ func TurnstileMiddleware(secret string) fiber.Handler {
 			form,
 		)
 		if err != nil {
-			log.Printf("Turnstile verify error ip=%s err=%v", c.IP(), err)
+			log.Warnf("Turnstile verify error ip=%s err=%v", c.IP(), err)
 			return c.Status(fiber.StatusInternalServerError).
 				JSON(NewErrorResponse(fiber.StatusInternalServerError, "Captcha verification failed"))
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("Turnstile bad status ip=%s status=%d", c.IP(), resp.StatusCode)
+			log.Warnf("Turnstile bad status ip=%s status=%d", c.IP(), resp.StatusCode)
 			return c.Status(fiber.StatusInternalServerError).
 				JSON(NewErrorResponse(fiber.StatusInternalServerError, "Captcha verification failed"))
 		}
 
 		var result turnstileResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			log.Printf("Turnstile decode error ip=%s err=%v", c.IP(), err)
+			log.Warnf("Turnstile decode error ip=%s err=%v", c.IP(), err)
 			return c.Status(fiber.StatusInternalServerError).
 				JSON(NewErrorResponse(fiber.StatusInternalServerError, "Captcha verification failed"))
 		}
 
-		log.Printf("Result %+v", result)
+		log.Debugf("Result %+v", result)
 
 		if !result.Success {
-			log.Printf("Turnstile invalid ip=%s errors=%v", c.IP(), result.ErrorCodes)
+			log.Warnf("Turnstile invalid ip=%s errors=%v", c.IP(), result.ErrorCodes)
 			return c.Status(fiber.StatusForbidden).
 				JSON(NewErrorResponse(fiber.StatusForbidden, "Verification failed"))
 		}
