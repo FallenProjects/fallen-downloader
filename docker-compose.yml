@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  fallen-downloader:
+    build: .
+    container_name: fallen-downloader
+    env_file:
+      - .env
+
+    ports:
+      - "${PORT}:${PORT}"
+
+    restart: unless-stopped
