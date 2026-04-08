@@ -17,6 +17,7 @@ WORKDIR /app
 
 COPY --from=builder /app/downloader ./downloader
 COPY --from=builder /app/templates ./templates
+COPY --from=builder /app/static ./static
 
 USER app
 

@@ -18,8 +18,8 @@ import (
 	"github.com/gofiber/template/html/v2"
 )
 
-//go:embed templates/*
-var templatesFS embed.FS
+//go:embed templates/* static/*
+var assetsFS embed.FS
 
 func main() {
 	cfg, err := config.Load()
@@ -29,7 +29,7 @@ func main() {
 
 	client := httpx.New(cfg.ApiKey, cfg.ApiUrl)
 
-	engine := html.NewFileSystem(http.FS(templatesFS), ".html")
+	engine := html.NewFileSystem(http.FS(assetsFS), ".html")
 
 	app := fiber.New(fiber.Config{
 		Views:       engine,
@@ -69,9 +69,14 @@ func main() {
 		})
 	})
 
-	subFS, _ := fs.Sub(templatesFS, "templates")
+	subFS, _ := fs.Sub(assetsFS, "templates")
 	app.Use("/", static.New("", static.Config{
 		FS: subFS,
+	}))
+
+	staticFS, _ := fs.Sub(assetsFS, "static")
+	app.Use("/", static.New("", static.Config{
+		FS: staticFS,
 	}))
 
 	app.Get("/health", func(c fiber.Ctx) error {
