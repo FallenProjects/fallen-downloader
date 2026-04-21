@@ -5,6 +5,7 @@ const SNAP_PATTERNS = {
     "X": /https?:\/\/(?:www\.|m\.)?(?:twitter\.com|x\.com)\/[\w._-]+\/status\/\d+/i,
     "FaceBook": /https?:\/\/(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.watch|fb\.com)\/.*/i,
     "Threads": /https?:\/\/(?:www\.)?threads\.(?:com|net)\/.*/i,
+    "TwitchVideos": /https?:\/\/(?:www\.|m\.)?twitch\.tv\/(?:videos|[\w._-]+\/video)\/\d+/i,
     "TwitchClip": /https?:\/\/(?:www\.|m\.)?(?:twitch\.tv\/clip\/[\w-]+|clips\.twitch\.tv\/[\w-]+|twitch\.tv\/[\w-]\/clip\/[\w-]+)/i,
     "SoraAi": /^https:\/\/sora\.chatgpt\.com\/p\/s_[0-9a-fA-F]{32}\?psh=[A-Za-z0-9\-_\.]+$/,
     "SunoAi": /^https:\/\/suno\.com\/song\/[0-9a-fA-F\-]{36}\/?$/,
@@ -18,7 +19,8 @@ const MUSIC_PATTERNS = {
     "JioSaavn": /https?:\/\/(?:www\.)?jiosaavn\.com\/(song|album|playlist|featured)\/[^\/]+\/([A-Za-z0-9_]+)/i,
     "Spotify": /https?:\/\/(?:open\.|www\.)?spotify\.com\/(album|track|playlist|artist)\/([A-Za-z0-9]+)/i,
     "Tidal": /https?:\/\/(?:www\.|listen\.)?tidal\.com\/(?:browse\/)?(track|album|playlist)\/([a-zA-Z0-9-]+)/i,
-    "Gaana": /https?:\/\/(?:www\.)?gaana\.com\/(song|album|playlist|artist)\/([A-Za-z0-9\-]+)/i
+    "Gaana": /https?:\/\/(?:www\.)?gaana\.com\/(song|album|playlist|artist)\/([A-Za-z0-9\-]+)/i,
+    "MX-Player": /https?:\/\/(?:www\.)?mxplayer\.in\/(?:show|movie|shorts)\/.*/i
 };
 
 const urlInput = document.getElementById('url-input');
