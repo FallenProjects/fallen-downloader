@@ -1,26 +1,48 @@
 const SNAP_PATTERNS = {
     "Instagram": /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/(?:p|reel|tv|stories\/[A-Za-z0-9_.]+|stories\/highlights)?\/?[A-Za-z0-9._-]*/i,
+
     "TikTok": /https?:\/\/(?:www\.|m\.)?(?:vm\.|vt\.)?tiktok\.com\/[^\s]+/i,
-    "Pinterest": /https?:\/\/(?:(?:www\.|[a-z]{2}\.)?pinterest\.[a-z.]+\/pin\/\d+|pin\.it\/[A-Za-z0-9]+)\/?/i,
+
+    "Pin": /https?:\/\/(?:(?:www\.|[a-z]{2}\.)?pinterest\.[a-z.]+\/pin\/\d+|pin\.it\/[A-Za-z0-9]+)\/?/i,
+
     "X": /https?:\/\/(?:www\.|m\.)?(?:twitter\.com|x\.com)\/[\w._-]+\/status\/\d+/i,
+
     "FaceBook": /https?:\/\/(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.watch|fb\.com)\/.*/i,
+
     "Threads": /https?:\/\/(?:www\.)?threads\.(?:com|net)\/.*/i,
-    "TwitchVideos": /https?:\/\/(?:www\.|m\.)?twitch\.tv\/(?:videos|[\w._-]+\/video)\/\d+/i,
-    "TwitchClip": /https?:\/\/(?:www\.|m\.)?(?:twitch\.tv\/clip\/[\w-]+|clips\.twitch\.tv\/[\w-]+|twitch\.tv\/[\w-]\/clip\/[\w-]+)/i,
+
+    "TwitchClip": /https?:\/\/(?:www\.|m\.)?(?:twitch\.tv\/clip\/[\w-]+|clips\.twitch\.tv\/[\w-]+|twitch\.tv\/[\w-]+\/clip\/[\w-]+)/i,
+
+    "KickClip": /https?:\/\/(?:www\.)?kick\.com\/[\w._-]+\/clips\/[\w-]+/i,
+
     "SoraAi": /^https:\/\/sora\.chatgpt\.com\/p\/s_[0-9a-fA-F]{32}\?psh=[A-Za-z0-9\-_\.]+$/,
+
     "SunoAi": /^https:\/\/suno\.com\/song\/[0-9a-fA-F\-]{36}\/?$/,
-    "Reddit": /https?:\/\/(?:www\.|m\.)?reddit\.com\/r\/[\w-]+\/comments\/[\w-]+\/.*/i,
+
+    "Reddit": /https?:\/\/(?:www\.|m\.)?reddit\.com\/r\/[\w-]+\/(?:comments\/[\w-]+\/.*|s\/[\w-]+)/i,
+
     "SnapChat": /https?:\/\/(?:www\.)?snapchat\.com\/.*/i
 };
 
+
 const MUSIC_PATTERNS = {
     "Deezer": /https?:\/\/(?:www\.)?deezer\.com\/(?:[a-z]{2}\/)?(track|album|playlist)\/(\d+)/i,
-    "SoundCloud": /https?:\/\/(?:www\.|m\.)?soundcloud\.com\/.*/i,
+
+    "SoundCloud": /https?:\/\/(?:(?:www\.|m\.)?soundcloud\.com|on\.soundcloud\.com|snd\.sc)\/.*/i,
+
     "JioSaavn": /https?:\/\/(?:www\.)?jiosaavn\.com\/(song|album|playlist|featured)\/[^\/]+\/([A-Za-z0-9_]+)/i,
+
     "Spotify": /https?:\/\/(?:open\.|www\.)?spotify\.com\/(album|track|playlist|artist)\/([A-Za-z0-9]+)/i,
+
     "Tidal": /https?:\/\/(?:www\.|listen\.)?tidal\.com\/(?:browse\/)?(track|album|playlist)\/([a-zA-Z0-9-]+)/i,
+
     "Gaana": /https?:\/\/(?:www\.)?gaana\.com\/(song|album|playlist|artist)\/([A-Za-z0-9\-]+)/i,
-    "MX-Player": /https?:\/\/(?:www\.)?mxplayer\.in\/(?:show|movie|shorts)\/.*/i
+
+    "mxplayer": /https?:\/\/(?:www\.)?mxplayer\.in\/(?:show|movie|shorts)\/.*/i,
+
+    "TwitchVideo": /https?:\/\/(?:www\.|m\.)?twitch\.tv\/(?:videos|[\w._-]+\/video)\/\d+/i,
+
+    "KickVideo": /https?:\/\/(?:www\.)?kick\.com\/[\w._-]+\/videos\/[a-fA-F0-9-]+/i
 };
 
 const urlInput = document.getElementById('url-input');
