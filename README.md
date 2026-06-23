@@ -20,7 +20,7 @@ It serves a built-in frontend and exposes a small API used by that frontend.
 - Go 1.26+
 - Fiber v3
 - Cloudflare Turnstile
-- External provider API: `https://api.fallenapi.fun`
+- External provider API: `https://api.onegrab.fun`
 
 ## Project Structure
 
@@ -43,7 +43,7 @@ Copy `sample.env` to `.env` and update values.
 | Variable             | Required    | Default                     | Description                                      |
 |----------------------|-------------|-----------------------------|--------------------------------------------------|
 | `API_KEY`            | Yes         | -                           | API key sent to upstream provider in `X-API-Key` |
-| `API_URL`            | No          | `https://api.fallenapi.fun` | Base URL for upstream provider                   |
+| `API_URL`            | No          | `https://api.onegrab.fun` | Base URL for upstream provider                   |
 | `PORT`               | No          | `8080`                      | HTTP server port                                 |
 | `TURNSTILE_SECRET`   | Yes         | -                           | Secret used to verify `X-CF-Turnstile-Token`     |
 | `TURNSTILE_SITE_KEY` | Recommended | empty                       | Site key injected into frontend Turnstile widget |

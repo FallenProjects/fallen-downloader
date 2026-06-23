@@ -30,7 +30,7 @@ func Load() (*Config, error) {
 
 	cfg.ApiUrl = os.Getenv("API_URL")
 	if cfg.ApiUrl == "" {
-		cfg.ApiUrl = "https://api.fallenapi.fun"
+		cfg.ApiUrl = "https://api.onegrab.fun"
 	}
 
 	cfg.Port = os.Getenv("PORT")
