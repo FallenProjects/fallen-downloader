@@ -178,13 +178,14 @@ function formatDuration(seconds) {
   const s = Math.floor(Number(seconds));
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
-function addArtwork(parent, source, alt, className) {
+function addArtwork(parent, source, alt, className, fallback) {
   const safe = safeLink(source);
   if (!safe) return;
-  const img = el('img', className); img.src = safe; img.alt = alt || ''; img.loading = 'lazy'; img.decoding = 'async'; parent.append(img);
+  const img = el('img', className); img.src = safe; img.alt = alt || ''; img.loading = 'lazy'; img.decoding = 'async';
+  if (fallback) img.addEventListener('error', () => { img.remove(); parent.append(icon(fallback)); }, { once: true });
+  parent.append(img);
 }
 const ICONS = {
-  download: '<path d="M12 3v11m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/>',
   open: '<path d="M13 5h6v6m0-6-9 9"/><path d="M19 13v6H5V5h6"/>',
   video: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1"/><path d="m3 17 5-5 4 4 3-3 6 5"/>',
@@ -202,17 +203,15 @@ function icon(name) {
   svg.innerHTML = ICONS[name];
   return svg;
 }
-function fileAction(file, action, featured = false) {
-  const link = el('a', featured ? 'file-action featured-action ' + action : 'file-action ' + action);
+function fileAction(file, featured = false, position = '') {
+  const link = el('a', featured ? 'file-action featured-action' : 'file-action');
   link.href = file.url;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
-  if (action === 'download') link.download = '';
-  const name = action === 'download' ? 'Download' : 'Open in new tab';
-  link.setAttribute('aria-label', name + ' ' + file.kind.toLowerCase());
-  link.title = action === 'download' ? 'Download from the media host. Some hosts may open the file in a new tab.' : 'Open from the media host in a new tab';
-  link.append(icon(action));
-  if (featured) link.append(el('span', '', name));
+  link.setAttribute('aria-label', 'Open ' + file.kind.toLowerCase() + (position ? ' ' + position : '') + ' in a new tab');
+  link.title = 'Open from the media host in a new tab';
+  link.append(icon('open'));
+  if (featured) link.append(el('span', '', 'Open in new tab'));
   return link;
 }
 function resultHeading(title, count) {
@@ -231,9 +230,6 @@ function renderSocial(raw, platformName) {
     const audioURLs = new Set(audios.map((a) => typeof a === 'string' ? a : a?.url));
     const videos = (Array.isArray(entry.videos) ? entry.videos : []).filter((v) => !audioURLs.has(typeof v === 'string' ? v : v?.url));
     const images = Array.isArray(entry.images) ? entry.images : [];
-    const livePhotos = Array.isArray(entry.live_photos) ? entry.live_photos : [];
-    const seenVideos = new Set(videos.map((v) => typeof v === 'string' ? v : v?.url));
-    const extraLivePhotos = livePhotos.filter((value) => !seenVideos.has(typeof value === 'string' ? value : value?.url));
     const files = [];
     const seen = new Set();
     const addFile = (item, kind) => {
@@ -245,7 +241,6 @@ function renderSocial(raw, platformName) {
     };
     videos.forEach((item) => addFile(item, 'Video'));
     audios.forEach((item) => addFile(item, 'Audio'));
-    extraLivePhotos.forEach((item) => addFile(item, 'Live photo'));
     if (Array.isArray(entry.media)) entry.media.forEach((item) => {
       const type = String(item?.type || '').toLowerCase();
       addFile(item, type.includes('audio') ? 'Audio' : type.includes('image') || type.includes('photo') ? 'Image' : type.includes('video') ? 'Video' : 'Media');
@@ -258,7 +253,7 @@ function renderSocial(raw, platformName) {
     const main = el('div', 'result-main');
     const previewURL = single && files[0].kind === 'Image' ? files[0].url : files[0].thumbnail || entry.thumbnail || entry.cover || entry.videos?.[0]?.thumbnail;
     const preview = el('div', 'result-preview');
-    if (safeLink(previewURL)) addArtwork(preview, previewURL, '', 'result-art');
+    if (safeLink(previewURL)) addArtwork(preview, previewURL, '', 'result-art', files[0].kind === 'Image' ? 'image' : files[0].kind === 'Audio' ? 'audio' : 'video');
     else preview.append(icon(files[0].kind === 'Image' ? 'image' : files[0].kind === 'Audio' ? 'audio' : 'video'));
     main.append(preview);
     const copy = el('div', 'result-copy');
@@ -269,26 +264,32 @@ function renderSocial(raw, platformName) {
     if (single && files[0].detail) copy.append(el('p', 'result-detail', String(files[0].detail)));
     if (single) {
       const actions = el('div', 'featured-actions');
-      actions.append(fileAction(files[0], 'download', true), fileAction(files[0], 'open', true));
+      actions.append(fileAction(files[0], true));
       copy.append(actions);
     } else copy.append(el('p', 'result-available', files.length + ' files available'));
     main.append(copy); card.append(main);
     if (!single) {
-      const grid = el('div', 'file-grid');
-      files.forEach((file) => {
-        const tile = el('div', 'file-tile');
-        const thumb = el('div', 'file-thumb');
-        const thumbURL = file.kind === 'Image' ? file.url : file.thumbnail;
-        if (safeLink(thumbURL)) addArtwork(thumb, thumbURL, '', '');
-        else thumb.append(icon(file.kind === 'Image' ? 'image' : file.kind === 'Audio' ? 'audio' : 'video'));
-        const info = el('div', 'file-info');
-        info.append(el('span', 'file-kind', file.kind));
-        if (file.detail) info.append(el('span', 'file-detail', String(file.detail)));
-        const actions = el('div', 'file-actions');
-        actions.append(fileAction(file, 'download'), fileAction(file, 'open'));
-        tile.append(thumb, info, actions); grid.append(tile);
-      });
-      card.append(grid);
+      for (const [kind, heading, visual] of [['Video', 'Videos', true], ['Image', 'Photos', true], ['Audio', 'Audio', false], ['Media', 'Other files', false]]) {
+        const groupFiles = files.filter((file) => file.kind === kind);
+        if (!groupFiles.length) continue;
+        const section = el('section', 'file-section');
+        section.append(el('h4', 'file-section-title', heading));
+        const list = el('div', visual ? 'visual-grid' : 'file-list');
+        groupFiles.forEach((file, index) => {
+          const tile = el('div', visual ? 'visual-tile' : 'file-row');
+          const thumb = el('div', visual ? 'visual-thumb' : 'file-thumb');
+          const thumbURL = kind === 'Image' ? file.url : file.thumbnail;
+          if (safeLink(thumbURL)) addArtwork(thumb, thumbURL, '', '', kind === 'Image' ? 'image' : 'video');
+          else thumb.append(icon(kind === 'Audio' ? 'audio' : kind === 'Image' ? 'image' : 'video'));
+          const actions = el('div', 'file-actions');
+          const position = groupFiles.length > 1 ? index + 1 + ' of ' + groupFiles.length : '';
+          actions.append(fileAction(file, false, position));
+          tile.append(thumb);
+          if (!visual) tile.append(el('span', 'file-detail', String(file.detail || (kind === 'Audio' ? 'Audio file' : 'Media file'))));
+          tile.append(actions); list.append(tile);
+        });
+        section.append(list); card.append(section);
+      }
     }
     results.append(card); shown++;
   });
@@ -344,15 +345,11 @@ async function resolveTrack(trackURL, button) {
     if (!file) throw new Error('The service did not return a media link for this track.');
     const telegram = /^https?:\/\/(?:t\.me|telegram\.me)\//i.test(file);
     const stream = new URL(file).pathname.toLowerCase().endsWith('.m3u8');
-    const actions = el('div', 'track-actions');
-    const media = { url: file, kind: 'Audio' };
-    if (!telegram && !stream) actions.append(fileAction(media, 'download', true));
-    const open = fileAction(media, 'open', true);
+    const open = fileAction({ url: file, kind: 'Audio' }, true);
     if (telegram) open.querySelector('span').textContent = 'Open in Telegram';
     else if (stream) open.querySelector('span').textContent = 'Open stream';
-    actions.append(open);
-    button.replaceWith(actions);
-    message(telegram ? 'This link opens a Telegram message.' : stream ? 'This is an HLS stream. Open it with a compatible player.' : 'Audio file ready.');
+    button.replaceWith(open);
+    message(telegram ? 'This link opens a Telegram message.' : stream ? 'This is an HLS stream. Open it with a compatible player.' : 'File link ready. Open it in a new tab.');
   } catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); button.disabled = false; }
   finally { setBusy(false); }
 }
