@@ -208,13 +208,6 @@ function trackArray(data) {
   for (const key of ['results', 'tracks', 'items']) if (Array.isArray(data?.[key])) return data[key];
   return data && typeof data === 'object' && (data.title || data.url) ? [data] : [];
 }
-function isCollectionURL(raw) {
-  try {
-    const u = new URL(raw);
-    return /\/(album|playlist|artist|section|show|featured|sets)\//i.test(u.pathname) || (u.hostname === 'podcasts.apple.com' && !u.searchParams.has('i'));
-  }
-  catch { return false; }
-}
 function formatDuration(seconds) {
   if (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return '';
   const s = Math.floor(Number(seconds));
@@ -250,10 +243,10 @@ function fileAction(file, featured = false, position = '') {
   link.href = file.url;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
-  link.setAttribute('aria-label', 'Open ' + file.kind.toLowerCase() + (position ? ' ' + position : '') + ' in a new tab');
-  link.title = 'Open from the media host in a new tab';
+  link.setAttribute('aria-label', 'Download ' + file.kind.toLowerCase() + (position ? ' ' + position : ''));
+  link.title = 'Download from the media host. Your browser may preview the file.';
   link.append(icon('open'));
-  if (featured) link.append(el('span', '', 'Open in new tab'));
+  if (featured) link.append(el('span', '', 'Download'));
   return link;
 }
 function resultHeading(title, count) {
@@ -335,7 +328,7 @@ function renderSocial(raw, platformName) {
     }
     results.append(card); shown++;
   });
-  if (!shown) { results.classList.add('hidden'); message('No files were available for this link. Try another post or track.', true); }
+  if (!shown) { results.classList.add('hidden'); message('No files were available for this link. Try another post or song.', true); }
   else {
     if (totalFiles === 1) results.querySelector('.results-head h2').textContent = 'Your file is ready';
     clearMessage();
@@ -344,54 +337,39 @@ function renderSocial(raw, platformName) {
 function renderTracks(raw, title) {
   const tracks = trackArray(unwrap(raw)).filter((t) => t && !isYouTubeItem(t));
   resultHeading(title, tracks.length + (tracks.length === 1 ? ' result' : ' results'));
-  if (!tracks.length) { message('No tracks found. Try another search or music link.', true); return; }
+  if (!tracks.length) { message('No songs found. Try another search or music link.', true); return; }
   clearMessage();
   const list = el('div', 'track-list');
   tracks.forEach((track) => {
     const card = el('article', 'track-card');
     addArtwork(card, track.thumbnail || track.artwork || track.cover, '', '');
-    const copy = el('div', 'result-copy'); copy.append(el('h3', 'result-title', track.title || 'Untitled track'));
+    const copy = el('div', 'result-copy'); copy.append(el('h3', 'result-title', track.title || 'Untitled song'));
     const meta = [track.artist || track.channel || track.creator, formatDuration(track.duration), track.platform].filter(Boolean).join(' · ');
     if (meta) copy.append(el('p', 'result-meta', meta));
     card.append(copy);
     const trackURL = track.url || track.link;
     if (trackURL && classify(trackURL).kind === 'music') {
-      const collection = isCollectionURL(trackURL);
-      const button = el('button', 'resolve-button', collection ? 'View tracks' : 'Get file link'); button.type = 'button';
-      button.addEventListener('click', () => collection ? openCollection(trackURL) : resolveTrack(trackURL, button)); card.append(button);
+      const button = el('button', 'resolve-button', 'Download'); button.type = 'button';
+      button.addEventListener('click', () => resolveTrack(trackURL, button)); card.append(button);
     }
     list.append(card);
   });
   results.append(list);
 }
-async function openCollection(raw) {
-  if (busy) return;
-  const found = classify(raw);
-  if (found.blocked) { message(YOUTUBE_MESSAGE, true); return; }
-  if (found.kind !== 'music') { message('This collection link is unavailable.', true); return; }
-  setBusy(true, 'Loading tracks…');
-  try { renderTracks(await request('/api/extract', { url: raw }), 'Tracks in this collection'); }
-  catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); }
-  finally { setBusy(false); }
-}
 async function resolveTrack(trackURL, button) {
   if (busy) return;
   const found = classify(trackURL);
   if (found.blocked) { message(YOUTUBE_MESSAGE, true); return; }
-  if (found.kind !== 'music') { message('This track cannot be resolved from its returned link.', true); return; }
-  setBusy(true, 'Getting the file link…'); button.disabled = true;
+  if (found.kind !== 'music') { message('This song cannot be downloaded from its link.', true); return; }
+  setBusy(true, 'Preparing download…'); button.disabled = true;
   try {
     const data = unwrap(await request('/api/resolve', { url: trackURL }));
-    if (data?.key) throw new Error('This track uses an encrypted stream and cannot be opened directly here. Try another track.');
+    if (data?.key) throw new Error('This song uses an encrypted stream and cannot be downloaded here. Try another song.');
     const file = safeLink(data?.cdnurl || data?.cdnUrl);
-    if (!file) throw new Error('The service did not return a media link for this track.');
-    const telegram = /^https?:\/\/(?:t\.me|telegram\.me)\//i.test(file);
+    if (!file) throw new Error('No download link is available for this song.');
     const stream = new URL(file).pathname.toLowerCase().endsWith('.m3u8');
-    const open = fileAction({ url: file, kind: 'Audio' }, true);
-    if (telegram) open.querySelector('span').textContent = 'Open in Telegram';
-    else if (stream) open.querySelector('span').textContent = 'Open stream';
-    button.replaceWith(open);
-    message(telegram ? 'This link opens a Telegram message.' : stream ? 'This is an HLS stream. Open it with a compatible player.' : 'File link ready. Open it in a new tab.');
+    button.replaceWith(fileAction({ url: file, kind: 'Audio' }, true));
+    message(stream ? 'Stream link ready. Your browser may need a compatible player.' : 'Download ready. Your browser may preview the file.');
   } catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); button.disabled = false; }
   finally { setBusy(false); }
 }
@@ -406,7 +384,7 @@ async function extractLink(raw, revision, manual = false) {
   try {
     const data = await request('/api/extract', { url: raw });
     if (revision !== linkRevision || raw !== urlInput.value.trim()) return;
-    if (found.kind === 'music') renderTracks(data, 'Tracks from ' + found.name);
+    if (found.kind === 'music') renderTracks(data, 'Songs from ' + found.name);
     else renderSocial(data, found.name);
     lastLoadedLink = raw;
     $('extract-button-label').textContent = 'Check again';
@@ -426,8 +404,8 @@ $('search-form').addEventListener('submit', async (event) => {
   const q = $('search-input').value.trim();
   if (q.split(/\s+/).some((word) => classify(word.replace(/^[\[(<"']+|[\])>,.;"']+$/g, '')).blocked)) { message(YOUTUBE_MESSAGE, true); return; }
   if (q.length < 2 || q.length > 120) { message('Enter at least two characters to search music.', true); return; }
-  results.classList.add('hidden'); setBusy(true, 'Searching for tracks…');
-  try { renderTracks(await request('/api/search', { q, platform: $('search-platform').value }), 'Matching tracks'); }
+  results.classList.add('hidden'); setBusy(true, 'Searching for songs…');
+  try { renderTracks(await request('/api/search', { q, platform: $('search-platform').value }), 'Matching songs'); }
   catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); }
   finally { setBusy(false); }
 });

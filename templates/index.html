@@ -9,8 +9,8 @@
   <link rel="icon" href="/favicon.ico">
   <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   {{if .TurnstileSiteKey}}<link rel="preconnect" href="https://challenges.cloudflare.com" crossorigin>{{end}}
-  <link rel="stylesheet" href="/style.css?v={{.CSSVersion}}">
-  <script src="/app.js?v={{.JSVersion}}" defer></script>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
 </head>
 <body data-turnstile-key="{{.TurnstileSiteKey}}" data-youtube-message="{{.YouTubeMessage}}" data-youtube-hosts="{{.YouTubeHosts}}">
   <div class="app-shell">
@@ -20,7 +20,7 @@
     </header>
 
     <main class="workspace">
-      <div class="intro"><h1>Paste the link.<br><em>Choose the file.</em></h1><p>See the video, audio, or images available from a supported post or track. Pick what you want to save.</p></div>
+      <div class="intro"><h1>Paste the link.<br><em>Choose the file.</em></h1><p>See the video, audio, or images available from a supported post or song. Pick what you want to save.</p></div>
 
       <section class="tool" aria-label="Media downloader">
         <div class="tool-tabs" role="tablist" aria-label="Choose a tool">
@@ -29,14 +29,14 @@
         </div>
         <div id="panel-link" class="tool-panel" role="tabpanel" aria-labelledby="tab-link">
           <form id="link-form" novalidate>
-            <label for="url-input">Post or track URL</label>
+            <label for="url-input">Post or song link</label>
             <div class="input-row"><input id="url-input" name="url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://www.instagram.com/reel/…" aria-describedby="link-help"><button class="secondary paste-button" id="paste-button" type="button">Paste</button></div>
             <div class="form-foot"><p id="link-help">Paste a supported link. Available files appear automatically.</p><span id="detected-platform" class="detected hidden" aria-live="polite"></span></div>
             <button id="extract-button" class="primary action-button" type="submit"><span id="extract-button-label">Show available files</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 11 0m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </form>
         </div>
         <div id="panel-search" class="tool-panel hidden" role="tabpanel" aria-labelledby="tab-search">
-          <form id="search-form" novalidate><label for="search-input">Song, artist, or album</label><div class="input-row"><input id="search-input" name="q" type="search" autocomplete="off" placeholder="Try “mood lofi”" minlength="2" maxlength="120"></div><div class="search-options"><label for="search-platform">Music service</label><select id="search-platform" name="platform">{{range .Platforms}}{{if eq .Kind "music"}}<option value="{{.SearchID}}" {{if eq .Name "Spotify"}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select></div><p class="search-help">Choose a track from the results to get its file link.</p><button id="search-button" class="primary action-button" type="submit">Find tracks <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 11 0m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>
+          <form id="search-form" novalidate><label for="search-input">Song, artist, or album</label><div class="input-row"><input id="search-input" name="q" type="search" autocomplete="off" placeholder="Try “mood lofi”" minlength="2" maxlength="120"></div><div class="search-options"><label for="search-platform">Music service</label><select id="search-platform" name="platform">{{range .Platforms}}{{if eq .Kind "music"}}<option value="{{.SearchID}}" {{if eq .Name "Spotify"}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select></div><p class="search-help">Select Download next to the song you want.</p><button id="search-button" class="primary action-button" type="submit">Search songs <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 11 0m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>
         </div>
       </section>
 
