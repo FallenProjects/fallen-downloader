@@ -1,474 +1,255 @@
-const SNAP_PATTERNS = {
-    "Instagram": /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/(?:p|reel|tv|stories\/[A-Za-z0-9_.]+|stories\/highlights)?\/?[A-Za-z0-9._-]*/i,
+const YOUTUBE_MESSAGE = document.body.dataset.youtubeMessage;
+const $ = (id) => document.getElementById(id);
+const urlInput = $('url-input');
+const status = $('status');
+const results = $('results');
+const platformChips = [...document.querySelectorAll('.chip[data-hosts]')];
+let activeRequest = null;
+let busy = false;
+let widgetId = null;
 
-    "TikTok": /https?:\/\/(?:www\.|m\.)?(?:vm\.|vt\.)?tiktok\.com\/[^\s]+/i,
-
-    "Pin": /https?:\/\/(?:(?:www\.|[a-z]{2}\.)?pinterest\.[a-z.]+\/pin\/\d+|pin\.it\/[A-Za-z0-9]+)\/?/i,
-
-    "X": /https?:\/\/(?:www\.|m\.)?(?:twitter\.com|x\.com)\/[\w._-]+\/status\/\d+/i,
-
-    "FaceBook": /https?:\/\/(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.watch|fb\.com)\/.*/i,
-
-    "Threads": /https?:\/\/(?:www\.)?threads\.(?:com|net)\/.*/i,
-
-    "TwitchClip": /https?:\/\/(?:www\.|m\.)?(?:twitch\.tv\/clip\/[\w-]+|clips\.twitch\.tv\/[\w-]+|twitch\.tv\/[\w-]+\/clip\/[\w-]+)/i,
-
-    "KickClip": /https?:\/\/(?:www\.)?kick\.com\/[\w._-]+\/clips\/[\w-]+/i,
-
-    "SoraAi": /^https:\/\/sora\.chatgpt\.com\/p\/s_[0-9a-fA-F]{32}\?psh=[A-Za-z0-9\-_\.]+$/,
-
-    "SunoAi": /^https:\/\/suno\.com\/song\/[0-9a-fA-F\-]{36}\/?$/,
-
-    "Reddit": /https?:\/\/(?:www\.|m\.)?reddit\.com\/r\/[\w-]+\/(?:comments\/[\w-]+\/.*|s\/[\w-]+)/i,
-
-    "SnapChat": /https?:\/\/(?:www\.)?snapchat\.com\/.*/i
-};
-
-
-const MUSIC_PATTERNS = {
-    "Deezer": /https?:\/\/(?:www\.)?deezer\.com\/(?:[a-z]{2}\/)?(track|album|playlist)\/(\d+)/i,
-
-    "SoundCloud": /https?:\/\/(?:(?:www\.|m\.)?soundcloud\.com|on\.soundcloud\.com|snd\.sc)\/.*/i,
-
-    "JioSaavn": /https?:\/\/(?:www\.)?jiosaavn\.com\/(song|album|playlist|featured)\/[^\/]+\/([A-Za-z0-9_]+)/i,
-
-    "Spotify": /https?:\/\/(?:open\.|www\.)?spotify\.com\/(album|track|playlist|artist)\/([A-Za-z0-9]+)/i,
-
-    "Tidal": /https?:\/\/(?:www\.|listen\.)?tidal\.com\/(?:browse\/)?(track|album|playlist)\/([a-zA-Z0-9-]+)/i,
-
-    "Gaana": /https?:\/\/(?:www\.)?gaana\.com\/(song|album|playlist|artist)\/([A-Za-z0-9\-]+)/i,
-
-    "mxplayer": /https?:\/\/(?:www\.)?mxplayer\.in\/(?:show|movie|shorts)\/.*/i,
-
-    "TwitchVideo": /https?:\/\/(?:www\.|m\.)?twitch\.tv\/(?:videos|[\w._-]+\/video)\/\d+/i,
-
-    "KickVideo": /https?:\/\/(?:www\.)?kick\.com\/[\w._-]+\/videos\/[a-fA-F0-9-]+/i
-};
-
-const urlInput = document.getElementById('url-input');
-const downloadBtn = document.getElementById('download-btn');
-const platformBadge = document.getElementById('platform-badge');
-const statusMessage = document.getElementById('status-message');
-const loader = document.getElementById('loader');
-const resultContainer = document.getElementById('result-container');
-const mainContent = document.getElementById('main-content');
-
-let turnstileToken = '';
-let pendingAction = null;
-let turnstileId = null;
-
-const turnstileSiteKey = window.turnstileSiteKey;
-
-window.initTurnstile = function () {
-
-    if (!turnstileSiteKey || turnstileId !== null) return;
-
-    turnstileId = turnstile.render('#turnstile-container', {
-        sitekey: turnstileSiteKey,
-        size: "invisible",
-        callback: (token) => {
-            turnstileToken = token;
-            onTurnstileSuccess(token);
-        },
-        "error-callback": () => {
-            showError("Verification failed");
-            hideLoader();
-            pendingAction = null;
-        }
-    });
-
-};
-
-if (window.turnstileReady) {
-    window.initTurnstile();
+function youtubeHost(host) {
+  return document.body.dataset.youtubeHosts.split(',').some((domain) => host === domain || host.endsWith('.' + domain));
 }
-
-urlInput.addEventListener('input', () => {
-    const url = urlInput.value.trim();
-    const platform = detectPlatform(url);
-
-    statusMessage.classList.add('hidden');
-
-    if (platform) {
-        platformBadge.innerText = platform;
-        platformBadge.classList.remove('hidden');
-        downloadBtn.disabled = false;
-    } else {
-        platformBadge.classList.add('hidden');
-        downloadBtn.disabled = true;
-    }
+function classify(raw) {
+  let url;
+  try { url = new URL(raw.trim()); } catch { return { error: 'Paste a complete media link, starting with https://.' }; }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port || url.hash) return { error: 'Enter a standard public media link.' };
+  const host = url.hostname.toLowerCase().replace(/\.$/, '');
+  if (youtubeHost(host)) return { error: YOUTUBE_MESSAGE, blocked: true };
+  const chip = platformChips.find((item) => item.dataset.hosts.split(',').some((domain) => host === domain || host.endsWith('.' + domain)));
+  return chip ? { name: chip.textContent.trim(), kind: chip.closest('#music-platforms') ? 'music' : 'social' } : { error: 'This platform is not supported yet. Try one of the links listed below.' };
+}
+function safeLink(raw) {
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.toLowerCase();
+    if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password || youtubeHost(host) || host === 'localhost' || host.startsWith('[') || /^\d+\.\d+\.\d+\.\d+$/.test(host) || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return null;
+    return raw;
+  } catch { return null; }
+}
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = String(text);
+  return node;
+}
+function message(text, error = false) {
+  status.textContent = text;
+  status.className = 'status' + (error ? ' error' : '');
+  status.classList.remove('hidden');
+}
+function clearMessage() { status.classList.add('hidden'); status.textContent = ''; }
+function setBusy(next, label) {
+  busy = next;
+  $('extract-button').disabled = next;
+  $('search-button').disabled = next;
+  if (next) message(label || 'Checking the link…');
+}
+function updateDetection() {
+  const badge = $('detected-platform');
+  const raw = urlInput.value.trim();
+  if (!raw) { badge.classList.add('hidden'); clearMessage(); return; }
+  const found = classify(raw);
+  badge.textContent = found.name || (found.blocked ? 'Temporarily unavailable' : 'Unsupported link');
+  badge.className = 'detected' + (found.blocked ? ' blocked' : '');
+  if (found.blocked) message(YOUTUBE_MESSAGE, true);
+  else if (!busy) clearMessage();
+}
+urlInput.addEventListener('input', updateDetection);
+$('paste-button').addEventListener('click', async () => {
+  try { urlInput.value = await navigator.clipboard.readText(); updateDetection(); urlInput.focus(); }
+  catch { message('Clipboard access is unavailable. Paste your link into the field instead.', true); }
 });
-
-urlInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !downloadBtn.disabled) {
-        event.preventDefault();
-        downloadBtn.click();
-    }
-});
-
-function detectPlatform(url) {
-    for (const [name, regex] of Object.entries(SNAP_PATTERNS)) {
-        if (regex.test(url)) return name;
-    }
-    for (const [name, regex] of Object.entries(MUSIC_PATTERNS)) {
-        if (regex.test(url)) return name;
-    }
-    return null;
+function activate(tab) {
+  const link = tab === 'link';
+  $('tab-link').classList.toggle('active', link); $('tab-search').classList.toggle('active', !link);
+  $('tab-link').setAttribute('aria-selected', String(link)); $('tab-search').setAttribute('aria-selected', String(!link));
+  $('panel-link').classList.toggle('hidden', !link); $('panel-search').classList.toggle('hidden', link);
+  clearMessage(); results.classList.add('hidden');
+  (link ? urlInput : $('search-input')).focus();
+  activeRequest?.abort();
 }
+$('tab-link').addEventListener('click', () => activate('link'));
+$('tab-search').addEventListener('click', () => activate('search'));
 
-
-downloadBtn.addEventListener('click', async () => {
-
-    const url = urlInput.value.trim();
-    const platform = detectPlatform(url);
-
-    if (!url || !platform) return;
-
-    resetUI();
-    showLoader();
-
-    pendingAction = { type: 'main', url };
-
-    if (turnstileId !== null) {
-        turnstile.reset(turnstileId);
-        turnstile.execute(turnstileId);
-    } else {
-        onTurnstileSuccess('');
-    }
-
-});
-
-async function onTurnstileSuccess(token) {
-
-    if (!pendingAction) return;
-
-    const action = pendingAction;
-    pendingAction = null;
-
-    if (action.type === 'main') {
-        const platform = detectPlatform(action.url);
-        if (SNAP_PATTERNS[platform]) {
-            await handleSnapWorkflow(action.url, token);
-        } else {
-            await handleMusicWorkflow(action.url, token);
-        }
-    } else if (action.type === 'music-dl') {
-        await handleMusicDownload(action.url, action.button, token);
-    }
+async function verificationToken() {
+  if (!document.body.dataset.turnstileKey) return '';
+  const started = Date.now();
+  while (!window.turnstile && Date.now() - started < 6000) await new Promise((resolve) => setTimeout(resolve, 100));
+  if (!window.turnstile) throw new Error('Verification could not load. Refresh the page and try again.');
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Verification timed out. Please try again.')), 12000);
+    const settings = {
+      sitekey: document.body.dataset.turnstileKey, size: 'invisible', execution: 'execute',
+      callback: (token) => { clearTimeout(timer); resolve(token); },
+      'error-callback': () => { clearTimeout(timer); reject(new Error('Verification failed. Please try again.')); },
+      'expired-callback': () => { clearTimeout(timer); reject(new Error('Verification expired. Please try again.')); }
+    };
+    try { if (widgetId === null) widgetId = turnstile.render('#turnstile-container', settings); else turnstile.reset(widgetId); turnstile.execute(widgetId); }
+    catch { clearTimeout(timer); reject(new Error('Verification could not start. Refresh the page and try again.')); }
+  });
 }
-
-async function handleSnapWorkflow(url, token) {
-    try {
-        const data = await apiCall('/api/snap', { url }, token);
-        displaySnapResult(data);
-    } catch (err) {
-        showError(err.message || "Download failed");
-    } finally {
-        hideLoader();
-    }
-}
-
-async function handleMusicWorkflow(url, token) {
-    try {
-        const data = await apiCall('/api/info', { url }, token);
-        displayMusicResult(data);
-    } catch (err) {
-        showError(err.message || "Search failed");
-    } finally {
-        hideLoader();
-    }
-}
-
-async function handleMusicDownload(url, button, token) {
-    const originalContent = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-    try {
-        const data = await apiCall('/api/dl', { url }, token);
-        if (data.cdnurl) {
-            triggerDownload(data.cdnurl);
-        } else {
-            throw new Error("Download URL not found");
-        }
-    } catch (err) {
-        showError(err.message || "Download failed");
-    } finally {
-        button.disabled = false;
-        button.innerHTML = originalContent;
-    }
-}
-
-
-async function apiCall(endpoint, params, token) {
-
-    const query = new URLSearchParams(params).toString();
-    const response = await fetch(`${endpoint}?${query}`, {
-        headers: {
-            "X-CF-Turnstile-Token": token
-        }
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(data.message || "API failed");
-    }
-
+async function request(path, params) {
+  activeRequest?.abort();
+  const controller = new AbortController(); activeRequest = controller;
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const token = await verificationToken();
+    const response = await fetch(path + '?' + new URLSearchParams(params), { signal: controller.signal, headers: token ? { 'X-CF-Turnstile-Token': token } : {}, cache: 'no-store' });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.message || 'The request failed. Please try again.');
     return data;
+  } finally { clearTimeout(timeout); if (activeRequest === controller) activeRequest = null; }
 }
-
-function displaySnapResult(data) {
-    resultContainer.classList.remove('hidden');
-    resultContainer.innerHTML = '';
-    resultContainer.setAttribute('aria-busy', 'false');
-    statusMessage.classList.add('hidden');
-
-    const card = document.createElement('div');
-    card.className = 'glass result-card';
-
-    const header = document.createElement('div');
-    header.className = 'result-header';
-
-    const title = document.createElement('h2');
-    title.textContent = data.title || 'Result';
-    header.appendChild(title);
-    card.appendChild(header);
-
-    let mainThumbnail = '';
-    if (data.videos && data.videos.length > 0 && data.videos[0].thumbnail) {
-        mainThumbnail = data.videos[0].thumbnail;
-    } else if (data.images && data.images.length > 0) {
-        mainThumbnail = data.images[0];
-    }
-
-    if (mainThumbnail) {
-        const thumbContainer = document.createElement('div');
-        thumbContainer.className = 'thumbnail-container';
-        const img = document.createElement('img');
-        img.src = mainThumbnail;
-        img.alt = data.title ? `${data.title} thumbnail` : 'Media thumbnail';
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        thumbContainer.appendChild(img);
-        card.appendChild(thumbContainer);
-    }
-
-    // Videos
-    if (data.videos && data.videos.length > 0) {
-        const videoSection = document.createElement('div');
-        videoSection.className = 'download-section';
-        videoSection.innerHTML = '<h3>Videos</h3>';
-
-        const grid = document.createElement('div');
-        grid.className = 'download-grid';
-
-        data.videos.forEach((video, index) => {
-            const btn = document.createElement('button');
-            const label = data.videos.length > 1 ? `Download Video ${index + 1}` : 'Download Video';
-            btn.innerHTML = `<i class="fas fa-video"></i> ${label}`;
-            btn.onclick = () => triggerDownload(video.url);
-            grid.appendChild(btn);
-        });
-
-        videoSection.appendChild(grid);
-        card.appendChild(videoSection);
-    }
-
-    // Audios
-    if (data.audios && data.audios.length > 0) {
-        const audioSection = document.createElement('div');
-        audioSection.className = 'download-section';
-        audioSection.innerHTML = '<h3>Audios</h3>';
-
-        const grid = document.createElement('div');
-        grid.className = 'download-grid';
-
-        data.audios.forEach((audio, index) => {
-            const btn = document.createElement('button');
-            const label = data.audios.length > 1 ? `Download Audio ${index + 1}` : 'Download Audio';
-            btn.className = 'btn-success';
-            btn.innerHTML = `<i class="fas fa-music"></i> ${label}`;
-            btn.onclick = () => triggerDownload(audio.url);
-            grid.appendChild(btn);
-        });
-
-        audioSection.appendChild(grid);
-        card.appendChild(audioSection);
-    }
-
-    // Images
-    if (data.images && data.images.length > 0) {
-        const imageSection = document.createElement('div');
-        imageSection.className = 'download-section';
-        imageSection.innerHTML = '<h3>Images</h3>';
-
-        const grid = document.createElement('div');
-        grid.className = 'image-grid';
-
-        data.images.forEach((imgUrl) => {
-            const imgItem = document.createElement('div');
-            imgItem.className = 'image-item';
-
-            const img = document.createElement('img');
-            img.src = imgUrl;
-            img.loading = 'lazy';
-            img.decoding = 'async';
-            img.alt = 'Downloadable media image';
-
-            const overlay = document.createElement('div');
-            overlay.className = 'image-overlay';
-            overlay.innerHTML = '<i class="fas fa-image"></i>';
-
-            imgItem.appendChild(img);
-            imgItem.appendChild(overlay);
-
-            imgItem.onclick = () => triggerDownload(imgUrl);
-            grid.appendChild(imgItem);
-        });
-
-        imageSection.appendChild(grid);
-        card.appendChild(imageSection);
-    }
-
-    resultContainer.appendChild(card);
+function unwrap(data) { return data && typeof data === 'object' && data.data && typeof data.data === 'object' ? data.data : data; }
+function isYouTubeItem(item) {
+  if (!item || typeof item !== 'object') return false;
+  if (typeof item.platform === 'string' && /youtube|youtu\.be/i.test(item.platform)) return true;
+  const raw = item.url || item.link || '';
+  try { return youtubeHost(new URL(raw).hostname.toLowerCase()); } catch { return false; }
 }
-
-function displayMusicResult(data) {
-    resultContainer.classList.remove('hidden');
-    resultContainer.innerHTML = '';
-    resultContainer.setAttribute('aria-busy', 'false');
-    statusMessage.classList.add('hidden');
-
-    const list = document.createElement('div');
-    list.className = 'track-list';
-
-    if (!data.results || data.results.length === 0) {
-        showError("No results found");
-        return;
-    }
-
-    data.results.forEach(track => {
-        const item = document.createElement('div');
-        item.className = 'track-item glass';
-
-        const durationStr = formatDuration(track.duration);
-
-        const thumb = document.createElement('div');
-        thumb.className = 'track-thumb';
-        const thumbImg = document.createElement('img');
-        thumbImg.src = track.thumbnail;
-        thumbImg.alt = track.title ? `${track.title} cover` : 'Track cover';
-        thumbImg.loading = 'lazy';
-        thumbImg.decoding = 'async';
-        thumb.appendChild(thumbImg);
-
-        const info = document.createElement('div');
-        info.className = 'track-info';
-
-        const title = document.createElement('div');
-        title.className = 'track-title';
-        title.title = track.title;
-        title.textContent = track.title;
-
-        const meta = document.createElement('div');
-        meta.className = 'track-meta';
-        meta.innerHTML = `
-            <span><i class="fas fa-user"></i> ${escapeHTML(track.channel)}</span>
-            <span><i class="fas fa-clock"></i> ${durationStr}</span>
-            <span><i class="fas fa-eye"></i> ${escapeHTML(track.views)}</span>
-        `;
-
-        info.appendChild(title);
-        info.appendChild(meta);
-
-        const dlContainer = document.createElement('div');
-        dlContainer.className = 'track-download';
-        const dlBtn = document.createElement('button');
-        dlBtn.className = 'btn-small';
-        dlBtn.innerHTML = '<i class="fas fa-download"></i> Download';
-        dlBtn.onclick = () => {
-            resetUI();
-            startMusicDownload(track.url, dlBtn);
-        };
-        dlContainer.appendChild(dlBtn);
-
-        item.appendChild(thumb);
-        item.appendChild(info);
-        item.appendChild(dlContainer);
-
-        list.appendChild(item);
-    });
-
-    resultContainer.appendChild(list);
+function trackArray(data) {
+  if (Array.isArray(data)) return data;
+  for (const key of ['results', 'tracks', 'items']) if (Array.isArray(data?.[key])) return data[key];
+  return data && typeof data === 'object' && (data.title || data.url) ? [data] : [];
 }
-
-function startMusicDownload(url, button) {
-    pendingAction = { type: 'music-dl', url, button };
-
-    if (turnstileId !== null) {
-        turnstile.reset(turnstileId);
-        turnstile.execute(turnstileId);
-    } else {
-        onTurnstileSuccess('');
-    }
+function isCollectionURL(raw) {
+  try {
+    const u = new URL(raw);
+    return /\/(album|playlist|artist|section|show|featured|sets)\//i.test(u.pathname) || (u.hostname === 'podcasts.apple.com' && !u.searchParams.has('i'));
+  }
+  catch { return false; }
 }
-
-function triggerDownload(url) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-
-    const fileName = url.split('/').pop().split('?')[0] || 'download';
-    a.setAttribute('download', fileName);
-
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    // Fallback for some browsers or cross-origin restrictions
-    setTimeout(() => {
-        if (a.parentNode) {
-            document.body.removeChild(a);
-        }
-    }, 100);
-}
-
 function formatDuration(seconds) {
-    if (!seconds) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  if (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return '';
+  const s = Math.floor(Number(seconds));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
-
-function escapeHTML(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+function addArtwork(parent, source, alt, className) {
+  const safe = safeLink(source);
+  if (!safe) return;
+  const img = el('img', className); img.src = safe; img.alt = alt || ''; img.loading = 'lazy'; img.decoding = 'async'; parent.append(img);
 }
-
-function resetUI() {
-    statusMessage.classList.add('hidden');
+function addDownload(parent, raw, label) {
+  const safe = safeLink(raw); if (!safe) return false;
+  const anchor = el('a', 'media-link', label);
+  anchor.href = safe; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
+  anchor.title = 'Opens the file from the media host. Your browser may open it in a new tab.';
+  parent.append(anchor); return true;
 }
-
-function showLoader() {
-    mainContent?.setAttribute('aria-busy', 'true');
-    loader.classList.remove('hidden');
-    resultContainer.classList.add('hidden');
-    resultContainer.setAttribute('aria-busy', 'true');
-    statusMessage.innerText = 'Processing request...';
-    statusMessage.className = 'status-message';
-    statusMessage.classList.remove('hidden');
+function resultHeading(title, count) {
+  results.replaceChildren(); results.classList.remove('hidden');
+  const head = el('div', 'results-head'); head.append(el('h2', '', title), el('span', '', count)); results.append(head);
 }
-
-function hideLoader() {
-    mainContent?.setAttribute('aria-busy', 'false');
-    loader.classList.add('hidden');
+function renderSocial(raw, platformName) {
+  const data = unwrap(raw);
+  const entries = Array.isArray(data?.items) ? data.items : [data];
+  resultHeading('Available files', platformName);
+  let shown = 0;
+  entries.forEach((entry, index) => {
+    if (!entry || isYouTubeItem(entry)) return;
+    const card = el('article', 'result-card');
+    const main = el('div', 'result-main');
+    addArtwork(main, entry.thumbnail || entry.cover || entry.videos?.[0]?.thumbnail, '', 'result-art');
+    const copy = el('div', 'result-copy');
+    copy.append(el('h3', 'result-title', entry.title || (entries.length > 1 ? 'Item ' + (index + 1) : 'Media from ' + platformName)));
+    const meta = [entry.author || entry.creator || entry.channel, formatDuration(entry.duration)].filter(Boolean).join(' · ');
+    if (meta) copy.append(el('p', 'result-meta', meta));
+    main.append(copy); card.append(main);
+    const links = el('div', 'media-list');
+    const videos = Array.isArray(entry.videos) ? entry.videos : [];
+    const audios = Array.isArray(entry.audios) ? entry.audios : [];
+    videos.forEach((v, i) => addDownload(links, typeof v === 'string' ? v : v?.url, (v?.quality || v?.format || 'Video') + (videos.length > 1 && !v?.quality && !v?.format ? ' ' + (i + 1) : '')));
+    audios.forEach((a, i) => addDownload(links, typeof a === 'string' ? a : a?.url, (a?.quality || a?.format || 'Audio') + (audios.length > 1 && !a?.quality && !a?.format ? ' ' + (i + 1) : '')));
+    if (Array.isArray(entry.media)) entry.media.forEach((m, i) => addDownload(links, m?.url, m?.quality || m?.format || m?.type || 'Media ' + (i + 1)));
+    if (links.childElementCount) card.append(links);
+    const images = [...(Array.isArray(entry.images) ? entry.images : []), ...(Array.isArray(entry.live_photos) ? entry.live_photos : [])];
+    if (images.length) {
+      const gallery = el('div', 'gallery');
+      images.forEach((value, i) => {
+        const rawURL = typeof value === 'string' ? value : value?.url;
+        const safe = safeLink(rawURL); if (!safe) return;
+        const link = el('a', 'gallery-item'); link.href = safe; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        addArtwork(link, safe, 'Image ' + (i + 1), ''); link.append(el('span', '', 'Open image ' + (i + 1))); gallery.append(link);
+      });
+      if (gallery.childElementCount) card.append(gallery);
+    }
+    if (links.childElementCount || images.length) { results.append(card); shown++; }
+  });
+  if (!shown) message('No files were available for this link. Try another post or track.', true);
+  else clearMessage();
 }
-
-function showError(msg) {
-    statusMessage.innerText = msg;
-    statusMessage.className = 'status-message status-error';
-    statusMessage.classList.remove('hidden');
+function renderTracks(raw, title) {
+  const tracks = trackArray(unwrap(raw)).filter((t) => t && !isYouTubeItem(t));
+  resultHeading(title, tracks.length + (tracks.length === 1 ? ' result' : ' results'));
+  if (!tracks.length) { message('No tracks found. Try another search or music link.', true); return; }
+  clearMessage();
+  const list = el('div', 'track-list');
+  tracks.forEach((track) => {
+    const card = el('article', 'track-card');
+    addArtwork(card, track.thumbnail || track.artwork || track.cover, '', '');
+    const copy = el('div', 'result-copy'); copy.append(el('h3', 'result-title', track.title || 'Untitled track'));
+    const meta = [track.artist || track.channel || track.creator, formatDuration(track.duration), track.platform].filter(Boolean).join(' · ');
+    if (meta) copy.append(el('p', 'result-meta', meta));
+    card.append(copy);
+    const trackURL = track.url || track.link;
+    if (trackURL && classify(trackURL).kind === 'music') {
+      const collection = isCollectionURL(trackURL);
+      const button = el('button', 'resolve-button', collection ? 'View tracks' : 'Get file link'); button.type = 'button';
+      button.addEventListener('click', () => collection ? openCollection(trackURL) : resolveTrack(trackURL, button)); card.append(button);
+    }
+    list.append(card);
+  });
+  results.append(list);
 }
+async function openCollection(raw) {
+  if (busy) return;
+  const found = classify(raw);
+  if (found.blocked) { message(YOUTUBE_MESSAGE, true); return; }
+  if (found.kind !== 'music') { message('This collection link is unavailable.', true); return; }
+  setBusy(true, 'Loading tracks…');
+  try { renderTracks(await request('/api/extract', { url: raw }), 'Tracks in this collection'); }
+  catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); }
+  finally { setBusy(false); }
+}
+async function resolveTrack(trackURL, button) {
+  if (busy) return;
+  const found = classify(trackURL);
+  if (found.blocked) { message(YOUTUBE_MESSAGE, true); return; }
+  if (found.kind !== 'music') { message('This track cannot be resolved from its returned link.', true); return; }
+  setBusy(true, 'Getting the file link…'); button.disabled = true;
+  try {
+    const data = unwrap(await request('/api/resolve', { url: trackURL }));
+    if (data?.key) throw new Error('This track uses an encrypted stream and cannot be opened directly here. Try another track.');
+    const file = safeLink(data?.cdnurl || data?.cdnUrl);
+    if (!file) throw new Error('The service did not return a media link for this track.');
+    const telegram = /^https?:\/\/(?:t\.me|telegram\.me)\//i.test(file);
+    const stream = new URL(file).pathname.toLowerCase().endsWith('.m3u8');
+    const link = el('a', 'media-link', telegram ? 'Open in Telegram' : stream ? 'Open stream' : 'Open media'); link.href = file; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    button.replaceWith(link); message(telegram ? 'This link opens a Telegram message.' : stream ? 'This is an HLS stream. Open it with a compatible player.' : 'Media link ready. Your browser may open or download it.');
+  } catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); button.disabled = false; }
+  finally { setBusy(false); }
+}
+$('link-form').addEventListener('submit', async (event) => {
+  event.preventDefault(); if (busy) return;
+  const raw = urlInput.value.trim(); const found = classify(raw);
+  if (found.error) { message(found.error, true); return; }
+  results.classList.add('hidden'); setBusy(true, 'Checking the link…');
+  try {
+    const data = await request('/api/extract', { url: raw });
+    if (found.kind === 'music') renderTracks(data, 'Tracks from ' + found.name);
+    else renderSocial(data, found.name);
+  } catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); }
+  finally { setBusy(false); }
+});
+$('search-form').addEventListener('submit', async (event) => {
+  event.preventDefault(); if (busy) return;
+  const q = $('search-input').value.trim();
+  if (q.split(/\s+/).some((word) => classify(word.replace(/^[\[(<"']+|[\])>,.;"']+$/g, '')).blocked)) { message(YOUTUBE_MESSAGE, true); return; }
+  if (q.length < 2 || q.length > 120) { message('Enter at least two characters to search music.', true); return; }
+  results.classList.add('hidden'); setBusy(true, 'Searching for tracks…');
+  try { renderTracks(await request('/api/search', { q, platform: $('search-platform').value }), 'Matching tracks'); }
+  catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); }
+  finally { setBusy(false); }
+});

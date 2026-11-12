@@ -1,105 +1,55 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fallen Downloader - Fast Media Downloader for Social and Music Links</title>
-    <meta name="description" content="Download videos, images, and audio from supported social and music links with Fallen Downloader. Fast web UI, secure Turnstile verification, and simple one-click downloads.">
-    <meta name="keywords" content="media downloader, instagram downloader, tiktok downloader, spotify downloader, fallen downloader">
-    <meta name="robots" content="index,follow,max-image-preview:large">
-    <meta name="author" content="FallenProjects">
-    <meta name="theme-color" content="#0d1117">
-    <link rel="canonical" href="https://github.com/FallenProjects/fallen-downloader">
-
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Fallen Downloader">
-    <meta property="og:title" content="Fallen Downloader - Fast Media Downloader">
-    <meta property="og:description" content="Paste a supported media link and download videos, images, or audio in seconds.">
-    <meta property="og:url" content="https://github.com/FallenProjects/fallen-downloader">
-    <meta property="og:image" content="https://opengraph.githubassets.com/1/FallenProjects/fallen-downloader">
-
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Fallen Downloader - Fast Media Downloader">
-    <meta name="twitter:description" content="Download media from supported social and music links with a modern and secure web UI.">
-    <meta name="twitter:image" content="https://opengraph.githubassets.com/1/FallenProjects/fallen-downloader">
-
-    <link rel="stylesheet" href="style.css?v=1.0.3">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f1fa">
+  <meta name="description" content="Paste a supported post or music link and choose from the files available to save.">
+  <title>Fallen Downloader — paste a link, choose a file</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
 </head>
-
-<body>
-<div class="container">
-    <header>
-        <h1><i class="fas fa-cloud-download-alt"></i> Fallen Downloader</h1>
-        <p>Fast, secure, and modern downloads for popular social and music platforms.</p>
-        <div class="supported-platforms" aria-label="Supported platforms">
-            <span>Instagram</span>
-            <span>TikTok</span>
-            <span>Pinterest</span>
-            <span>X</span>
-            <span>Spotify</span>
-            <span>SoundCloud</span>
-        </div>
+<body data-turnstile-key="{{.TurnstileSiteKey}}" data-youtube-message="{{.YouTubeMessage}}" data-youtube-hosts="{{.YouTubeHosts}}">
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Fallen Downloader home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M6 7h20v5H11v5h12v5H11v4H6V7Z" fill="currentColor"/></svg></span><span>fallen<span class="brand-light">/downloader</span></span></a>
+      <a class="source-link" href="https://github.com/FallenProjects/fallen-downloader" target="_blank" rel="noopener noreferrer">Source code</a>
     </header>
 
-    <main id="main-content">
-        <div class="card glass">
-            <label class="input-label" for="url-input">Paste your media URL</label>
-            <div class="input-group">
-                <input type="text" id="url-input"
-                       placeholder="Paste link here (Instagram, TikTok, Spotify...)"
-                       autocomplete="off"
-                       aria-describedby="input-help"
-                       inputmode="url">
+    <main class="workspace">
+      <div class="intro"><h1>Paste the link.<br><em>Choose the file.</em></h1><p>See the video, audio, or images available from a supported post or track. Pick what you want to save.</p></div>
 
-                <button id="download-btn" type="button" disabled aria-label="Download media from the pasted link">
-                    <i class="fas fa-download"></i> Download
-                </button>
-            </div>
-            <p id="input-help" class="input-help">Tip: press Enter to start after a valid URL is detected.</p>
-
-            <div id="platform-badge" class="badge hidden" aria-live="polite"></div>
+      <section class="tool" aria-label="Media downloader">
+        <div class="tool-tabs" role="tablist" aria-label="Choose a tool">
+          <button id="tab-link" class="tab active" role="tab" aria-selected="true" aria-controls="panel-link" type="button">From a link</button>
+          <button id="tab-search" class="tab" role="tab" aria-selected="false" aria-controls="panel-search" type="button">Search music</button>
         </div>
-
-        <div id="status-message" class="status-message hidden" role="status" aria-live="polite"></div>
-
-        <div id="loader" class="loader hidden" role="status" aria-live="polite" aria-label="Loading">
-            <div class="spinner"></div>
-            <p>Processing...</p>
+        <div id="panel-link" class="tool-panel" role="tabpanel" aria-labelledby="tab-link">
+          <form id="link-form" novalidate>
+            <label for="url-input">Post or track URL</label>
+            <div class="input-row"><input id="url-input" name="url" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://www.instagram.com/reel/…" aria-describedby="link-help"><button class="secondary paste-button" id="paste-button" type="button">Paste</button></div>
+            <div class="form-foot"><p id="link-help">Supported services are listed below. Links aren't saved here.</p><span id="detected-platform" class="detected hidden" aria-live="polite"></span></div>
+            <button id="extract-button" class="primary action-button" type="submit">Show available files <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 11 0m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          </form>
         </div>
+        <div id="panel-search" class="tool-panel hidden" role="tabpanel" aria-labelledby="tab-search">
+          <form id="search-form" novalidate><label for="search-input">Song, artist, or album</label><div class="input-row"><input id="search-input" name="q" type="search" autocomplete="off" placeholder="Try “mood lofi”" minlength="2" maxlength="120"></div><div class="search-options"><label for="search-platform">Music service</label><select id="search-platform" name="platform">{{range .Platforms}}{{if eq .Kind "music"}}<option value="{{.SearchID}}" {{if eq .Name "Spotify"}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select></div><p class="search-help">Choose a track from the results to get its file link.</p><button id="search-button" class="primary action-button" type="submit">Find tracks <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 11 0m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></form>
+        </div>
+      </section>
 
-        <div id="result-container" class="result-container hidden" aria-live="polite"></div>
+      <div id="status" class="status hidden" role="status" aria-live="polite"></div>
+      <section id="results" class="results hidden" aria-label="Available media" aria-live="polite"></section>
 
-        <!-- invisible turnstile -->
-        <div id="turnstile-container"></div>
+      <section class="platforms" aria-labelledby="platform-heading"><div class="section-heading"><h2 id="platform-heading">Supported services</h2><p>What you can save depends on the original link.</p></div><div class="platform-groups">
+        <div><h3>Social &amp; video</h3><div class="chip-list" id="social-platforms">{{range .Platforms}}{{if eq .Kind "social"}}<span class="chip" data-hosts="{{.HostsCSV}}">{{.Name}}</span>{{end}}{{end}}</div></div>
+        <div><h3>Music &amp; audio</h3><div class="chip-list" id="music-platforms">{{range .Platforms}}{{if eq .Kind "music"}}<span class="chip" data-hosts="{{.HostsCSV}}">{{.Name}}</span>{{end}}{{end}}</div></div>
+      </div></section>
+      <aside class="note">Download only content you have permission to use. Some files may be unavailable or links may expire.</aside>
     </main>
-
-    <footer>
-        <p>&copy; 2026 Fallen Downloader. Powered by api.fallenapi.fun.</p>
-        <p><a href="https://github.com/FallenProjects/fallen-downloader" target="_blank" rel="noopener noreferrer">View source on GitHub</a></p>
-    </footer>
-</div>
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "Fallen Downloader",
-  "url": "https://github.com/FallenProjects/fallen-downloader",
-  "description": "Fast, secure, and modern media downloader for supported social and music links."
-}
-</script>
-
-<script>
-    window.turnstileSiteKey = "{{.TurnstileSiteKey}}";
-    window.onloadTurnstileCallback = function() {
-        window.turnstileReady = true;
-        if (typeof window.initTurnstile === 'function') {
-            window.initTurnstile();
-        }
-    };
-</script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstileCallback" defer></script>
-<script src="app.js?v=1.0.3" defer></script>
+    <footer><span>Fallen Downloader</span><span>Media links by OneGrab</span></footer>
+  </div>
+  {{if .TurnstileSiteKey}}<div id="turnstile-container" aria-hidden="true"></div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>{{end}}
 </body>
 </html>

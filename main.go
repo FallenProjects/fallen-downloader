@@ -4,6 +4,7 @@ import (
 	"dl/internal/api"
 	"dl/internal/config"
 	"dl/internal/httpx"
+	"dl/internal/platform"
 	"embed"
 	"errors"
 	"io/fs"
@@ -12,7 +13,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/log"
 	"github.com/gofiber/fiber/v3/middleware/compress"
-	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
 	"github.com/gofiber/template/html/v2"
@@ -32,39 +32,37 @@ func main() {
 	engine := html.NewFileSystem(http.FS(assetsFS), ".html")
 
 	app := fiber.New(fiber.Config{
-		Views:       engine,
-		ProxyHeader: "CF-Connecting-IP",
+		Views: engine,
 		ErrorHandler: func(c fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := errors.AsType[*fiber.Error](err); ok {
 				code = e.Code
 			}
-			return c.Status(code).JSON(fiber.Map{
-				"code":    code,
-				"message": err.Error(),
-			})
+			message := "Something went wrong. Please try again."
+			if code == fiber.StatusNotFound {
+				message = "Page not found."
+			}
+			return c.Status(code).JSON(fiber.Map{"message": message})
 		},
 	})
 
 	app.Use(recover.New())
-	app.Use(logger.New(logger.Config{
-		TimeFormat: "15:04:05 ",
-		Format:     "${time} | ${status} | ${latency} | ${method} | ${url}\n",
-		Next: func(c fiber.Ctx) bool {
-			return c.Path() == "/stream"
-		},
-	}))
+	app.Use(func(c fiber.Ctx) error {
+		c.Set("Referrer-Policy", "no-referrer")
+		c.Set("X-Content-Type-Options", "nosniff")
+		return c.Next()
+	})
 
 	app.Use(compress.New(compress.Config{
 		Level: compress.LevelBestSpeed,
 	}))
 
-	port := cfg.Port
-	app.Use(api.CORS())
-
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.Render("templates/index", fiber.Map{
 			"TurnstileSiteKey": cfg.TurnstileSiteKey,
+			"Platforms":        platform.Supported(),
+			"YouTubeMessage":   platform.YouTubeUnavailable,
+			"YouTubeHosts":     platform.YouTubeHostsCSV(),
 		})
 	})
 
@@ -86,8 +84,8 @@ func main() {
 	})
 
 	api.Endpoints(app, cfg, client)
-	log.Info("Server started on :" + port)
-	if err := app.Listen(":" + port); err != nil {
+	log.Info("Server started on :" + cfg.Port)
+	if err := app.Listen(":" + cfg.Port); err != nil {
 		panic(err)
 	}
 	log.Info("Server stopped")
