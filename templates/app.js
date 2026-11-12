@@ -8,6 +8,10 @@ let activeRequest = null;
 let busy = false;
 let widgetId = null;
 let pendingVerification = null;
+let linkTimer = null;
+let linkRevision = 0;
+let loadingLink = '';
+let lastLoadedLink = '';
 
 function youtubeHost(host) {
   return document.body.dataset.youtubeHosts.split(',').some((domain) => host === domain || host.endsWith('.' + domain));
@@ -35,9 +39,9 @@ function el(tag, className, text) {
   if (text != null) node.textContent = String(text);
   return node;
 }
-function message(text, error = false) {
+function message(text, error = false, loading = false) {
   status.textContent = text;
-  status.className = 'status' + (error ? ' error' : '');
+  status.className = 'status' + (error ? ' error' : loading ? ' loading' : '');
   status.classList.remove('hidden');
 }
 function clearMessage() { status.classList.add('hidden'); status.textContent = ''; }
@@ -45,7 +49,7 @@ function setBusy(next, label) {
   busy = next;
   $('extract-button').disabled = next;
   $('search-button').disabled = next;
-  if (next) message(label || 'Checking the link…');
+  if (next) message(label || 'Checking the link…', false, true);
 }
 function updateDetection() {
   const badge = $('detected-platform');
@@ -57,9 +61,25 @@ function updateDetection() {
   if (found.blocked) message(YOUTUBE_MESSAGE, true);
   else if (!busy) clearMessage();
 }
-urlInput.addEventListener('input', updateDetection);
+function scheduleLink(delay = 550) {
+  clearTimeout(linkTimer);
+  const raw = urlInput.value.trim();
+  if (loadingLink && loadingLink === raw) return;
+  linkRevision++;
+  if (loadingLink && loadingLink !== raw) activeRequest?.abort();
+  if (raw !== lastLoadedLink) results.classList.add('hidden');
+  const found = classify(raw);
+  if (found.error) { if (!found.blocked) clearMessage(); return; }
+  $('extract-button-label').textContent = 'Show available files';
+  const revision = linkRevision;
+  linkTimer = setTimeout(() => extractLink(raw, revision), delay);
+}
+urlInput.addEventListener('input', (event) => {
+  updateDetection();
+  scheduleLink(event.inputType === 'insertFromPaste' ? 100 : 550);
+});
 $('paste-button').addEventListener('click', async () => {
-  try { urlInput.value = await navigator.clipboard.readText(); updateDetection(); urlInput.focus(); }
+  try { urlInput.value = await navigator.clipboard.readText(); updateDetection(); scheduleLink(100); urlInput.focus(); }
   catch { message('Clipboard access is unavailable. Paste your link into the field instead.', true); }
 });
 function activate(tab) {
@@ -68,29 +88,43 @@ function activate(tab) {
   $('tab-link').setAttribute('aria-selected', String(link)); $('tab-search').setAttribute('aria-selected', String(!link));
   $('panel-link').classList.toggle('hidden', !link); $('panel-search').classList.toggle('hidden', link);
   clearMessage(); results.classList.add('hidden');
+  clearTimeout(linkTimer); linkRevision++;
   (link ? urlInput : $('search-input')).focus();
   activeRequest?.abort();
+  if (link && urlInput.value.trim()) { updateDetection(); scheduleLink(150); }
 }
 $('tab-link').addEventListener('click', () => activate('link'));
 $('tab-search').addEventListener('click', () => activate('search'));
 
 function finishVerification(error, token) {
   if (!pendingVerification) return;
-  const { resolve, reject, timer } = pendingVerification;
+  const { resolve, reject, timer, signal, onAbort } = pendingVerification;
   pendingVerification = null;
   clearTimeout(timer);
+  signal.removeEventListener('abort', onAbort);
   if (error) reject(error);
   else resolve(token);
 }
-async function verificationToken() {
+function aborted() { return new DOMException('Request cancelled.', 'AbortError'); }
+async function verificationToken(signal) {
   if (!document.body.dataset.turnstileKey) return '';
   const started = Date.now();
-  while (!window.turnstile && Date.now() - started < 6000) await new Promise((resolve) => setTimeout(resolve, 100));
+  while (!window.turnstile && Date.now() - started < 6000) {
+    if (signal.aborted) throw aborted();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (signal.aborted) throw aborted();
   if (!window.turnstile) throw new Error('Verification could not load. Refresh the page and try again.');
   if (pendingVerification) throw new Error('Verification is already in progress.');
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => finishVerification(new Error('Verification did not finish. If you use Brave, allow this site in Shields and try again.')), 30000);
-    pendingVerification = { resolve, reject, timer };
+    const onAbort = () => {
+      finishVerification(aborted());
+      if (widgetId !== null) turnstile.reset(widgetId);
+    };
+    pendingVerification = { resolve, reject, timer, signal, onAbort };
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) { onAbort(); return; }
     try {
       if (widgetId === null) {
         widgetId = turnstile.render('#turnstile-container', {
@@ -111,7 +145,8 @@ async function request(path, params) {
   const controller = new AbortController(); activeRequest = controller;
   let timeout;
   try {
-    const token = await verificationToken();
+    const token = await verificationToken(controller.signal);
+    if (controller.signal.aborted) throw aborted();
     timeout = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(path + '?' + new URLSearchParams(params), { signal: controller.signal, headers: token ? { 'X-CF-Turnstile-Token': token } : {}, cache: 'no-store' });
     const data = await response.json().catch(() => null);
@@ -148,12 +183,37 @@ function addArtwork(parent, source, alt, className) {
   if (!safe) return;
   const img = el('img', className); img.src = safe; img.alt = alt || ''; img.loading = 'lazy'; img.decoding = 'async'; parent.append(img);
 }
-function addDownload(parent, raw, label) {
-  const safe = safeLink(raw); if (!safe) return false;
-  const anchor = el('a', 'media-link', label);
-  anchor.href = safe; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
-  anchor.title = 'Opens the file from the media host. Your browser may open it in a new tab.';
-  parent.append(anchor); return true;
+const ICONS = {
+  download: '<path d="M12 3v11m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/>',
+  open: '<path d="M13 5h6v6m0-6-9 9"/><path d="M19 13v6H5V5h6"/>',
+  video: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1"/><path d="m3 17 5-5 4 4 3-3 6 5"/>',
+  audio: '<path d="M9 18V5l11-2v13M9 18c0 2-2 3-4 3s-3-1-3-2 2-3 4-3h3m11 0c0 2-2 3-4 3s-3-1-3-2 2-3 4-3h3"/>'
+};
+function icon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.8');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = ICONS[name];
+  return svg;
+}
+function fileAction(file, action, featured = false) {
+  const link = el('a', featured ? 'file-action featured-action ' + action : 'file-action ' + action);
+  link.href = file.url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  if (action === 'download') link.download = '';
+  const name = action === 'download' ? 'Download' : 'Open in new tab';
+  link.setAttribute('aria-label', name + ' ' + file.kind.toLowerCase());
+  link.title = action === 'download' ? 'Download from the media host. Some hosts may open the file in a new tab.' : 'Open from the media host in a new tab';
+  link.append(icon(action));
+  if (featured) link.append(el('span', '', name));
+  return link;
 }
 function resultHeading(title, count) {
   results.replaceChildren(); results.classList.remove('hidden');
@@ -164,38 +224,79 @@ function renderSocial(raw, platformName) {
   const entries = Array.isArray(data?.items) ? data.items : [data];
   resultHeading('Available files', platformName);
   let shown = 0;
-  entries.forEach((entry, index) => {
+  let totalFiles = 0;
+  entries.forEach((entry) => {
     if (!entry || isYouTubeItem(entry)) return;
-    const card = el('article', 'result-card');
+    const audios = Array.isArray(entry.audios) ? entry.audios : [];
+    const audioURLs = new Set(audios.map((a) => typeof a === 'string' ? a : a?.url));
+    const videos = (Array.isArray(entry.videos) ? entry.videos : []).filter((v) => !audioURLs.has(typeof v === 'string' ? v : v?.url));
+    const images = Array.isArray(entry.images) ? entry.images : [];
+    const livePhotos = Array.isArray(entry.live_photos) ? entry.live_photos : [];
+    const seenVideos = new Set(videos.map((v) => typeof v === 'string' ? v : v?.url));
+    const extraLivePhotos = livePhotos.filter((value) => !seenVideos.has(typeof value === 'string' ? value : value?.url));
+    const files = [];
+    const seen = new Set();
+    const addFile = (item, kind) => {
+      const rawURL = typeof item === 'string' ? item : item?.url;
+      const url = safeLink(rawURL);
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      files.push({ url, kind, detail: typeof item === 'object' ? item?.quality || item?.format || '' : '', thumbnail: typeof item === 'object' ? item?.thumbnail : '' });
+    };
+    videos.forEach((item) => addFile(item, 'Video'));
+    audios.forEach((item) => addFile(item, 'Audio'));
+    extraLivePhotos.forEach((item) => addFile(item, 'Live photo'));
+    if (Array.isArray(entry.media)) entry.media.forEach((item) => {
+      const type = String(item?.type || '').toLowerCase();
+      addFile(item, type.includes('audio') ? 'Audio' : type.includes('image') || type.includes('photo') ? 'Image' : type.includes('video') ? 'Video' : 'Media');
+    });
+    images.forEach((item) => addFile(item, 'Image'));
+    if (!files.length) return;
+    totalFiles += files.length;
+    const single = files.length === 1;
+    const card = el('article', 'result-card ' + (single ? 'is-single' : 'is-multiple'));
     const main = el('div', 'result-main');
-    addArtwork(main, entry.thumbnail || entry.cover || entry.videos?.[0]?.thumbnail, '', 'result-art');
+    const previewURL = single && files[0].kind === 'Image' ? files[0].url : files[0].thumbnail || entry.thumbnail || entry.cover || entry.videos?.[0]?.thumbnail;
+    const preview = el('div', 'result-preview');
+    if (safeLink(previewURL)) addArtwork(preview, previewURL, '', 'result-art');
+    else preview.append(icon(files[0].kind === 'Image' ? 'image' : files[0].kind === 'Audio' ? 'audio' : 'video'));
+    main.append(preview);
     const copy = el('div', 'result-copy');
-    copy.append(el('h3', 'result-title', entry.title || (entries.length > 1 ? 'Item ' + (index + 1) : 'Media from ' + platformName)));
+    if (single) copy.append(el('span', 'result-kind', files[0].kind));
+    copy.append(el('h3', 'result-title', entry.title || 'Media from ' + platformName));
     const meta = [entry.author || entry.creator || entry.channel, formatDuration(entry.duration)].filter(Boolean).join(' · ');
     if (meta) copy.append(el('p', 'result-meta', meta));
+    if (single && files[0].detail) copy.append(el('p', 'result-detail', String(files[0].detail)));
+    if (single) {
+      const actions = el('div', 'featured-actions');
+      actions.append(fileAction(files[0], 'download', true), fileAction(files[0], 'open', true));
+      copy.append(actions);
+    } else copy.append(el('p', 'result-available', files.length + ' files available'));
     main.append(copy); card.append(main);
-    const links = el('div', 'media-list');
-    const videos = Array.isArray(entry.videos) ? entry.videos : [];
-    const audios = Array.isArray(entry.audios) ? entry.audios : [];
-    videos.forEach((v, i) => addDownload(links, typeof v === 'string' ? v : v?.url, (v?.quality || v?.format || 'Video') + (videos.length > 1 && !v?.quality && !v?.format ? ' ' + (i + 1) : '')));
-    audios.forEach((a, i) => addDownload(links, typeof a === 'string' ? a : a?.url, (a?.quality || a?.format || 'Audio') + (audios.length > 1 && !a?.quality && !a?.format ? ' ' + (i + 1) : '')));
-    if (Array.isArray(entry.media)) entry.media.forEach((m, i) => addDownload(links, m?.url, m?.quality || m?.format || m?.type || 'Media ' + (i + 1)));
-    if (links.childElementCount) card.append(links);
-    const images = [...(Array.isArray(entry.images) ? entry.images : []), ...(Array.isArray(entry.live_photos) ? entry.live_photos : [])];
-    if (images.length) {
-      const gallery = el('div', 'gallery');
-      images.forEach((value, i) => {
-        const rawURL = typeof value === 'string' ? value : value?.url;
-        const safe = safeLink(rawURL); if (!safe) return;
-        const link = el('a', 'gallery-item'); link.href = safe; link.target = '_blank'; link.rel = 'noopener noreferrer';
-        addArtwork(link, safe, 'Image ' + (i + 1), ''); link.append(el('span', '', 'Open image ' + (i + 1))); gallery.append(link);
+    if (!single) {
+      const grid = el('div', 'file-grid');
+      files.forEach((file) => {
+        const tile = el('div', 'file-tile');
+        const thumb = el('div', 'file-thumb');
+        const thumbURL = file.kind === 'Image' ? file.url : file.thumbnail;
+        if (safeLink(thumbURL)) addArtwork(thumb, thumbURL, '', '');
+        else thumb.append(icon(file.kind === 'Image' ? 'image' : file.kind === 'Audio' ? 'audio' : 'video'));
+        const info = el('div', 'file-info');
+        info.append(el('span', 'file-kind', file.kind));
+        if (file.detail) info.append(el('span', 'file-detail', String(file.detail)));
+        const actions = el('div', 'file-actions');
+        actions.append(fileAction(file, 'download'), fileAction(file, 'open'));
+        tile.append(thumb, info, actions); grid.append(tile);
       });
-      if (gallery.childElementCount) card.append(gallery);
+      card.append(grid);
     }
-    if (links.childElementCount || images.length) { results.append(card); shown++; }
+    results.append(card); shown++;
   });
-  if (!shown) message('No files were available for this link. Try another post or track.', true);
-  else clearMessage();
+  if (!shown) { results.classList.add('hidden'); message('No files were available for this link. Try another post or track.', true); }
+  else {
+    if (totalFiles === 1) results.querySelector('.results-head h2').textContent = 'Your file is ready';
+    clearMessage();
+  }
 }
 function renderTracks(raw, title) {
   const tracks = trackArray(unwrap(raw)).filter((t) => t && !isYouTubeItem(t));
@@ -243,22 +344,43 @@ async function resolveTrack(trackURL, button) {
     if (!file) throw new Error('The service did not return a media link for this track.');
     const telegram = /^https?:\/\/(?:t\.me|telegram\.me)\//i.test(file);
     const stream = new URL(file).pathname.toLowerCase().endsWith('.m3u8');
-    const link = el('a', 'media-link', telegram ? 'Open in Telegram' : stream ? 'Open stream' : 'Open media'); link.href = file; link.target = '_blank'; link.rel = 'noopener noreferrer';
-    button.replaceWith(link); message(telegram ? 'This link opens a Telegram message.' : stream ? 'This is an HLS stream. Open it with a compatible player.' : 'Media link ready. Your browser may open or download it.');
+    const actions = el('div', 'track-actions');
+    const media = { url: file, kind: 'Audio' };
+    if (!telegram && !stream) actions.append(fileAction(media, 'download', true));
+    const open = fileAction(media, 'open', true);
+    if (telegram) open.querySelector('span').textContent = 'Open in Telegram';
+    else if (stream) open.querySelector('span').textContent = 'Open stream';
+    actions.append(open);
+    button.replaceWith(actions);
+    message(telegram ? 'This link opens a Telegram message.' : stream ? 'This is an HLS stream. Open it with a compatible player.' : 'Audio file ready.');
   } catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); button.disabled = false; }
   finally { setBusy(false); }
 }
-$('link-form').addEventListener('submit', async (event) => {
-  event.preventDefault(); if (busy) return;
-  const raw = urlInput.value.trim(); const found = classify(raw);
-  if (found.error) { message(found.error, true); return; }
+async function extractLink(raw, revision, manual = false) {
+  if (revision !== linkRevision || raw !== urlInput.value.trim() || $('panel-link').classList.contains('hidden')) return;
+  const found = classify(raw);
+  if (found.error) { if (manual) message(found.error, true); return; }
+  if (!manual && raw === lastLoadedLink && !results.classList.contains('hidden')) return;
+  if (busy) { linkTimer = setTimeout(() => extractLink(raw, revision, manual), 100); return; }
+  loadingLink = raw;
   results.classList.add('hidden'); setBusy(true, 'Checking the link…');
   try {
     const data = await request('/api/extract', { url: raw });
+    if (revision !== linkRevision || raw !== urlInput.value.trim()) return;
     if (found.kind === 'music') renderTracks(data, 'Tracks from ' + found.name);
     else renderSocial(data, found.name);
-  } catch (error) { message(error.name === 'AbortError' ? 'Request cancelled.' : error.message, true); }
-  finally { setBusy(false); }
+    lastLoadedLink = raw;
+    $('extract-button-label').textContent = 'Check again';
+  } catch (error) {
+    if (revision === linkRevision) message(error.name === 'AbortError' ? 'The request took too long. Try again.' : error.message, true);
+  } finally {
+    if (loadingLink === raw) { loadingLink = ''; setBusy(false); }
+  }
+}
+$('link-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  clearTimeout(linkTimer);
+  extractLink(urlInput.value.trim(), linkRevision, true);
 });
 $('search-form').addEventListener('submit', async (event) => {
   event.preventDefault(); if (busy) return;
