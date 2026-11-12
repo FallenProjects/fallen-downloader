@@ -1,14 +1,17 @@
 package main
 
 import (
+	"crypto/sha256"
+	"embed"
+	"errors"
+	"fmt"
+	"io/fs"
+	"net/http"
+
 	"dl/internal/api"
 	"dl/internal/config"
 	"dl/internal/httpx"
 	"dl/internal/platform"
-	"embed"
-	"errors"
-	"io/fs"
-	"net/http"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/log"
@@ -21,6 +24,15 @@ import (
 //go:embed templates/* static/*
 var assetsFS embed.FS
 
+func assetVersion(name string) string {
+	content, err := assetsFS.ReadFile("templates/" + name)
+	if err != nil {
+		panic(err)
+	}
+	sum := sha256.Sum256(content)
+	return fmt.Sprintf("%x", sum[:8])
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -28,6 +40,8 @@ func main() {
 	}
 
 	client := httpx.New(cfg.ApiKey, cfg.ApiUrl)
+	jsVersion := assetVersion("app.js")
+	cssVersion := assetVersion("style.css")
 
 	engine := html.NewFileSystem(http.FS(assetsFS), ".html")
 
@@ -58,7 +72,10 @@ func main() {
 	}))
 
 	app.Get("/", func(c fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store")
 		return c.Render("templates/index", fiber.Map{
+			"JSVersion":        jsVersion,
+			"CSSVersion":       cssVersion,
 			"TurnstileSiteKey": cfg.TurnstileSiteKey,
 			"Platforms":        platform.Supported(),
 			"YouTubeMessage":   platform.YouTubeUnavailable,
@@ -68,12 +85,14 @@ func main() {
 
 	subFS, _ := fs.Sub(assetsFS, "templates")
 	app.Use("/", static.New("", static.Config{
-		FS: subFS,
+		FS:     subFS,
+		MaxAge: 3600,
 	}))
 
 	staticFS, _ := fs.Sub(assetsFS, "static")
 	app.Use("/", static.New("", static.Config{
-		FS: staticFS,
+		FS:     staticFS,
+		MaxAge: 3600,
 	}))
 
 	app.Get("/health", func(c fiber.Ctx) error {

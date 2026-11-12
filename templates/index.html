@@ -8,8 +8,8 @@
   <title>Fallen Downloader — paste a link, choose a file</title>
   <link rel="icon" href="/favicon.ico">
   <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="/style.css?v={{.CSSVersion}}">
+  <script src="/app.js?v={{.JSVersion}}" defer></script>
 </head>
 <body data-turnstile-key="{{.TurnstileSiteKey}}" data-youtube-message="{{.YouTubeMessage}}" data-youtube-hosts="{{.YouTubeHosts}}">
   <div class="app-shell">
@@ -40,6 +40,7 @@
       </section>
 
       <div id="status" class="status hidden" role="status" aria-live="polite"></div>
+      {{if .TurnstileSiteKey}}<div id="turnstile-container"></div>{{end}}
       <section id="results" class="results hidden" aria-label="Available media" aria-live="polite"></section>
 
       <section class="platforms" aria-labelledby="platform-heading"><div class="section-heading"><h2 id="platform-heading">Supported services</h2><p>What you can save depends on the original link.</p></div><div class="platform-groups">
@@ -50,6 +51,6 @@
     </main>
     <footer><span>Fallen Downloader</span><span>Media links by OneGrab</span></footer>
   </div>
-  {{if .TurnstileSiteKey}}<div id="turnstile-container" aria-hidden="true"></div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>{{end}}
+  {{if .TurnstileSiteKey}}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>{{end}}
 </body>
 </html>

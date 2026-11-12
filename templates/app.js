@@ -7,6 +7,7 @@ const platformChips = [...document.querySelectorAll('.chip[data-hosts]')];
 let activeRequest = null;
 let busy = false;
 let widgetId = null;
+let pendingVerification = null;
 
 function youtubeHost(host) {
   return document.body.dataset.youtubeHosts.split(',').some((domain) => host === domain || host.endsWith('.' + domain));
@@ -73,29 +74,45 @@ function activate(tab) {
 $('tab-link').addEventListener('click', () => activate('link'));
 $('tab-search').addEventListener('click', () => activate('search'));
 
+function finishVerification(error, token) {
+  if (!pendingVerification) return;
+  const { resolve, reject, timer } = pendingVerification;
+  pendingVerification = null;
+  clearTimeout(timer);
+  if (error) reject(error);
+  else resolve(token);
+}
 async function verificationToken() {
   if (!document.body.dataset.turnstileKey) return '';
   const started = Date.now();
   while (!window.turnstile && Date.now() - started < 6000) await new Promise((resolve) => setTimeout(resolve, 100));
   if (!window.turnstile) throw new Error('Verification could not load. Refresh the page and try again.');
+  if (pendingVerification) throw new Error('Verification is already in progress.');
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Verification timed out. Please try again.')), 12000);
-    const settings = {
-      sitekey: document.body.dataset.turnstileKey, size: 'invisible', execution: 'execute',
-      callback: (token) => { clearTimeout(timer); resolve(token); },
-      'error-callback': () => { clearTimeout(timer); reject(new Error('Verification failed. Please try again.')); },
-      'expired-callback': () => { clearTimeout(timer); reject(new Error('Verification expired. Please try again.')); }
-    };
-    try { if (widgetId === null) widgetId = turnstile.render('#turnstile-container', settings); else turnstile.reset(widgetId); turnstile.execute(widgetId); }
-    catch { clearTimeout(timer); reject(new Error('Verification could not start. Refresh the page and try again.')); }
+    const timer = setTimeout(() => finishVerification(new Error('Verification did not finish. If you use Brave, allow this site in Shields and try again.')), 30000);
+    pendingVerification = { resolve, reject, timer };
+    try {
+      if (widgetId === null) {
+        widgetId = turnstile.render('#turnstile-container', {
+          sitekey: document.body.dataset.turnstileKey, appearance: 'interaction-only', execution: 'execute',
+          callback: (token) => finishVerification(null, token),
+          'error-callback': () => { finishVerification(new Error('Verification failed. Please try again.')); return true; },
+          'expired-callback': () => finishVerification(new Error('Verification expired. Please try again.')),
+          'unsupported-callback': () => finishVerification(new Error('Verification is not supported by this browser. Update it and try again.'))
+        });
+        if (widgetId === null || widgetId === undefined) throw new Error('Widget did not render');
+      } else turnstile.reset(widgetId);
+      turnstile.execute(widgetId);
+    } catch { finishVerification(new Error('Verification could not start. Refresh the page and try again.')); }
   });
 }
 async function request(path, params) {
   activeRequest?.abort();
   const controller = new AbortController(); activeRequest = controller;
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  let timeout;
   try {
     const token = await verificationToken();
+    timeout = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(path + '?' + new URLSearchParams(params), { signal: controller.signal, headers: token ? { 'X-CF-Turnstile-Token': token } : {}, cache: 'no-store' });
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.message || 'The request failed. Please try again.');
