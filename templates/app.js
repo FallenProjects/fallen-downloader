@@ -8,6 +8,8 @@ let activeRequest = null;
 let busy = false;
 let widgetId = null;
 let pendingVerification = null;
+let readyVerification = null;
+let verificationPromise = null;
 let linkTimer = null;
 let linkRevision = 0;
 let loadingLink = '';
@@ -70,6 +72,7 @@ function scheduleLink(delay = 550) {
   if (raw !== lastLoadedLink) results.classList.add('hidden');
   const found = classify(raw);
   if (found.error) { if (!found.blocked) clearMessage(); return; }
+  warmVerification();
   $('extract-button-label').textContent = 'Show available files';
   const revision = linkRevision;
   linkTimer = setTimeout(() => extractLink(raw, revision), delay);
@@ -98,40 +101,31 @@ $('tab-search').addEventListener('click', () => activate('search'));
 
 function finishVerification(error, token) {
   if (!pendingVerification) return;
-  const { resolve, reject, timer, signal, onAbort } = pendingVerification;
+  const { resolve, reject, timer } = pendingVerification;
   pendingVerification = null;
   clearTimeout(timer);
-  signal.removeEventListener('abort', onAbort);
   if (error) reject(error);
   else resolve(token);
 }
 function aborted() { return new DOMException('Request cancelled.', 'AbortError'); }
-async function verificationToken(signal) {
-  if (!document.body.dataset.turnstileKey) return '';
+async function generateVerification() {
   const started = Date.now();
   while (!window.turnstile && Date.now() - started < 6000) {
-    if (signal.aborted) throw aborted();
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  if (signal.aborted) throw aborted();
   if (!window.turnstile) throw new Error('Verification could not load. Refresh the page and try again.');
   if (pendingVerification) throw new Error('Verification is already in progress.');
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => finishVerification(new Error('Verification did not finish. If you use Brave, allow this site in Shields and try again.')), 30000);
-    const onAbort = () => {
-      finishVerification(aborted());
-      if (widgetId !== null) turnstile.reset(widgetId);
-    };
-    pendingVerification = { resolve, reject, timer, signal, onAbort };
-    signal.addEventListener('abort', onAbort, { once: true });
-    if (signal.aborted) { onAbort(); return; }
+    pendingVerification = { resolve, reject, timer };
     try {
       if (widgetId === null) {
         widgetId = turnstile.render('#turnstile-container', {
-          sitekey: document.body.dataset.turnstileKey, appearance: 'interaction-only', execution: 'execute',
+          sitekey: document.body.dataset.turnstileKey, appearance: 'interaction-only', execution: 'execute', 'refresh-expired': 'manual',
           callback: (token) => finishVerification(null, token),
           'error-callback': () => { finishVerification(new Error('Verification failed. Please try again.')); return true; },
-          'expired-callback': () => finishVerification(new Error('Verification expired. Please try again.')),
+          'expired-callback': () => { readyVerification = null; finishVerification(new Error('Verification expired. Please try again.')); },
+          'timeout-callback': () => finishVerification(new Error('Verification timed out. Please try again.')),
           'unsupported-callback': () => finishVerification(new Error('Verification is not supported by this browser. Update it and try again.'))
         });
         if (widgetId === null || widgetId === undefined) throw new Error('Widget did not render');
@@ -140,19 +134,67 @@ async function verificationToken(signal) {
     } catch { finishVerification(new Error('Verification could not start. Refresh the page and try again.')); }
   });
 }
+function prepareVerification() {
+  if (!document.body.dataset.turnstileKey) return Promise.resolve('');
+  if (readyVerification && Date.now() - readyVerification.created < 240000) return Promise.resolve(readyVerification.value);
+  readyVerification = null;
+  if (!verificationPromise) {
+    verificationPromise = generateVerification().then((value) => {
+      readyVerification = { value, created: Date.now() };
+      return value;
+    }).finally(() => { verificationPromise = null; });
+  }
+  return verificationPromise;
+}
+function warmVerification() {
+  if (document.hidden || !document.body.dataset.turnstileKey) return;
+  prepareVerification().catch(() => {});
+}
+function waitWithAbort(promise, signal) {
+  if (signal.aborted) return Promise.reject(aborted());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => { signal.removeEventListener('abort', onAbort); reject(aborted()); };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then((value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (error) => { signal.removeEventListener('abort', onAbort); reject(error); });
+  });
+}
+async function takeVerificationToken(signal) {
+  if (!document.body.dataset.turnstileKey) return '';
+  for (;;) {
+    const token = await waitWithAbort(prepareVerification(), signal);
+    if (signal.aborted) throw aborted();
+    if (readyVerification?.value === token && Date.now() - readyVerification.created < 240000) {
+      readyVerification = null;
+      return token;
+    }
+  }
+}
+if (document.body.dataset.turnstileKey) {
+  document.addEventListener('DOMContentLoaded', warmVerification, { once: true });
+  document.addEventListener('visibilitychange', warmVerification);
+  urlInput.addEventListener('focus', warmVerification);
+  $('search-input').addEventListener('focus', warmVerification);
+}
 async function request(path, params) {
   activeRequest?.abort();
   const controller = new AbortController(); activeRequest = controller;
   let timeout;
+  let tokenUsed = false;
   try {
-    const token = await verificationToken(controller.signal);
+    const token = await takeVerificationToken(controller.signal);
     if (controller.signal.aborted) throw aborted();
+    tokenUsed = Boolean(token);
     timeout = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(path + '?' + new URLSearchParams(params), { signal: controller.signal, headers: token ? { 'X-CF-Turnstile-Token': token } : {}, cache: 'no-store' });
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.message || 'The request failed. Please try again.');
     return data;
-  } finally { clearTimeout(timeout); if (activeRequest === controller) activeRequest = null; }
+  } finally {
+    clearTimeout(timeout);
+    if (activeRequest === controller) activeRequest = null;
+    if (tokenUsed) warmVerification();
+  }
 }
 function unwrap(data) { return data && typeof data === 'object' && data.data && typeof data.data === 'object' ? data.data : data; }
 function isYouTubeItem(item) {

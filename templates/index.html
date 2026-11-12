@@ -8,6 +8,7 @@
   <title>Fallen Downloader — paste a link, choose a file</title>
   <link rel="icon" href="/favicon.ico">
   <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  {{if .TurnstileSiteKey}}<link rel="preconnect" href="https://challenges.cloudflare.com" crossorigin>{{end}}
   <link rel="stylesheet" href="/style.css?v={{.CSSVersion}}">
   <script src="/app.js?v={{.JSVersion}}" defer></script>
 </head>
